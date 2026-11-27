@@ -2,7 +2,7 @@
  * Book Detail Swap Request Script (book.php)
  *
  * Validates the student's offered book selection and submits a swap request
- * to api/swap-request.php via Fetch POST with the X-CSRF-Token header.
+ * to api/swap-request.php via Fetch POST with loading state and CSRF header.
  */
 (function () {
     'use strict';
@@ -25,32 +25,27 @@
 
         if (offeredBookId <= 0) {
             BookSwap.showAlert(alertBox, 'Please choose one of your available books to offer.', 'warning');
+            if (offeredSelect) offeredSelect.focus();
             return;
         }
 
-        if (submitBtn) {
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Sending...';
-        }
+        setLoading(submitBtn, true);
 
-        const result = await BookSwap.fetchJson('api/swap-request.php', {
+        const result = await api('api/swap-request.php', {
             method: 'POST',
-            body: {
+            data: {
                 requested_book_id: requestedBookId,
                 offered_book_id: offeredBookId,
             },
         });
+
+        setLoading(submitBtn, false);
 
         if (result && result.ok) {
             BookSwap.showAlert(alertBox, result.message || 'Swap request sent!', 'success');
             swapForm.reset();
         } else {
             BookSwap.showAlert(alertBox, (result && result.message) || 'Something went wrong, try again.', 'danger');
-        }
-
-        if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Send Swap Request';
         }
     });
 })();

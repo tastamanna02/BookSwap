@@ -168,22 +168,19 @@
             }
         }
 
-        btn.disabled = true;
-        const originalText = btn.textContent;
-        btn.textContent = 'Processing...';
+        setLoading(btn, true);
 
-        const result = await BookSwap.fetchJson('api/swap-action.php', {
+        const result = await api('api/swap-action.php', {
             method: 'POST',
-            body: { swap_id: swapId, action: action },
+            data: { swap_id: swapId, action: action },
         });
 
         if (result && result.ok) {
-            BookSwap.showAlert('alerts', result.message || 'Swap updated.', 'success');
+            showAlert(result.message || 'Swap updated.', 'success');
             await refreshSwaps();
         } else {
-            btn.disabled = false;
-            btn.textContent = originalText;
-            BookSwap.showAlert('alerts', (result && result.message) || 'Something went wrong, try again.', 'danger');
+            setLoading(btn, false);
+            showAlert((result && result.message) || 'Something went wrong, try again.', 'danger');
         }
     });
 })();

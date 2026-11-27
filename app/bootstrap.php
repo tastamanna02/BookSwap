@@ -243,11 +243,11 @@ function api_input(): array
 }
 
 /**
- * Allowed book condition values matching the books.book_condition ENUM.
+ * Allowed book condition keys matching Book::CONDITIONS and the database ENUM.
  */
 function bookConditions(): array
 {
-    return ['new', 'good', 'fair', 'worn'];
+    return array_keys(Book::CONDITIONS);
 }
 
 /**

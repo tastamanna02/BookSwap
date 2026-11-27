@@ -295,6 +295,19 @@ document.addEventListener('click', async (event) => {
                 rowEl.remove();
             }
         }
+
+        const myBooksList = document.getElementById('my-books-list');
+        if (myBooksList && myBooksList.querySelectorAll('.js-book-item').length === 0) {
+            const emptyCol = BookSwap.createEl('div', 'col-12');
+            const emptyBox = BookSwap.createEl('div', 'card border-0 shadow-sm p-4 text-center text-muted');
+            emptyBox.appendChild(BookSwap.createEl('p', 'mb-3', 'You have not listed any books yet.'));
+            const addBtn = BookSwap.createEl('a', 'btn btn-primary btn-sm', 'Add Your First Book');
+            addBtn.href = buildUrl('book-form.php');
+            emptyBox.appendChild(addBtn);
+            emptyCol.appendChild(emptyBox);
+            myBooksList.replaceChildren(emptyCol);
+        }
+
         showAlert(result.message || 'Book deleted successfully.', 'success');
     } else {
         setLoading(btn, false);
