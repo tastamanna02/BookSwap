@@ -15,7 +15,6 @@ Auth::requireLogin();
 $books = Book::findByOwner((int) Auth::id());
 
 $title = 'My Books';
-$pageScript = 'assets/js/my-books.js';
 require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'header.php';
 ?>
 
@@ -43,7 +42,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
             $isSwapped = ((int) $book['is_swapped'] === 1);
             $displayStatus = $isSwapped ? 'swapped' : $book['status'];
             ?>
-            <div class="col-sm-6 col-lg-4 js-book-item">
+            <div id="book-row-<?= e((string) $book['id']) ?>" class="col-sm-6 col-lg-4 js-book-item">
                 <div class="card h-100 shadow-sm book-card">
                     <div class="book-cover-box">
                         <?php if (!empty($book['image'])): ?>
@@ -75,9 +74,9 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                                     <a href="<?= e(url('book-form.php?id=' . (int) $book['id'])) ?>"
                                        class="btn btn-outline-primary btn-sm">Edit</a>
                                     <button type="button"
-                                            class="btn btn-outline-danger btn-sm js-delete-my-book"
-                                            data-book-id="<?= e((string) $book['id']) ?>"
-                                            data-book-title="<?= e($book['title']) ?>">
+                                            class="btn btn-outline-danger btn-sm"
+                                            data-delete-book="<?= e((string) $book['id']) ?>"
+                                            data-row="book-row-<?= e((string) $book['id']) ?>">
                                         Delete
                                     </button>
                                 <?php endif; ?>

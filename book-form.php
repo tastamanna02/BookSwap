@@ -178,7 +178,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
             <form method="POST"
                   action="<?= e(url($isEdit ? 'book-form.php?id=' . (int) $bookId : 'book-form.php')) ?>"
                   enctype="multipart/form-data"
-                  class="js-validate-form"
+                  class="needs-check"
                   novalidate>
                 <?= Csrf::field() ?>
                 <?php if ($isEdit): ?>
@@ -196,7 +196,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                                minlength="2"
                                maxlength="200"
                                value="<?= e($form['title']) ?>">
-                        <div class="invalid-feedback">Please enter the book title (2-200 characters).</div>
+                        <div class="invalid-feedback"></div>
                     </div>
 
                     <div class="col-md-6">
@@ -209,7 +209,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                                minlength="2"
                                maxlength="150"
                                value="<?= e($form['author']) ?>">
-                        <div class="invalid-feedback">Please enter the author name.</div>
+                        <div class="invalid-feedback"></div>
                     </div>
 
                     <div class="col-md-6">
@@ -223,7 +223,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                                 </option>
                             <?php endforeach; ?>
                         </select>
-                        <div class="invalid-feedback">Please select a category.</div>
+                        <div class="invalid-feedback"></div>
                     </div>
 
                     <div class="col-md-6">
@@ -235,6 +235,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                                 </option>
                             <?php endforeach; ?>
                         </select>
+                        <div class="invalid-feedback"></div>
                     </div>
 
                     <div class="col-12">
@@ -245,6 +246,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                                   maxlength="2000"
                                   class="form-control"
                                   placeholder="Edition details, highlighting notes, or preferred campus meetup spot..."><?= e($form['description'] ?? '') ?></textarea>
+                        <div class="invalid-feedback"></div>
                     </div>
 
                     <div class="col-12">
@@ -253,8 +255,9 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                                id="image"
                                name="image"
                                class="form-control"
+                               data-max-mb="2"
                                accept="image/jpeg,image/png,image/webp">
-                        <div class="invalid-feedback">Please upload a JPG, PNG, or WebP image under 2 MB.</div>
+                        <div class="invalid-feedback"></div>
 
                         <?php if ($isEdit && !empty($form['image'])): ?>
                             <div class="mt-2 d-flex align-items-center gap-3">

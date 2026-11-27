@@ -122,6 +122,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                            id="confirm_password"
                            name="confirm_password"
                            class="form-control"
+                           data-match="#password"
                            required
                            minlength="8">
                     <div class="invalid-feedback"></div>

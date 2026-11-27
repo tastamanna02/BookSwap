@@ -119,7 +119,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                 </div>
             <?php endif; ?>
 
-            <form method="POST" action="<?= e(url('profile.php')) ?>" class="js-validate-form" novalidate>
+            <form method="POST" action="<?= e(url('profile.php')) ?>" class="needs-check" novalidate>
                 <?= Csrf::field() ?>
                 <input type="hidden" name="form_type" value="profile">
 
@@ -133,7 +133,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                            minlength="2"
                            maxlength="100"
                            value="<?= e($user['name']) ?>">
-                    <div class="invalid-feedback">Please enter your name (2-100 characters).</div>
+                    <div class="invalid-feedback"></div>
                 </div>
 
                 <div class="mb-3">
@@ -158,26 +158,26 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                 </div>
             <?php endif; ?>
 
-            <form method="POST" action="<?= e(url('profile.php')) ?>" class="js-validate-form" novalidate>
+            <form method="POST" action="<?= e(url('profile.php')) ?>" class="needs-check" novalidate>
                 <?= Csrf::field() ?>
                 <input type="hidden" name="form_type" value="password">
 
                 <div class="mb-3">
                     <label for="current_password" class="form-label">Current Password</label>
                     <input type="password" id="current_password" name="current_password" class="form-control" required>
-                    <div class="invalid-feedback">Please enter your current password.</div>
+                    <div class="invalid-feedback"></div>
                 </div>
 
                 <div class="mb-3">
                     <label for="new_password" class="form-label">New Password</label>
                     <input type="password" id="new_password" name="new_password" class="form-control" required minlength="8">
-                    <div class="invalid-feedback">New password must be at least 8 characters.</div>
+                    <div class="invalid-feedback"></div>
                 </div>
 
                 <div class="mb-3">
                     <label for="confirm_password" class="form-label">Confirm New Password</label>
-                    <input type="password" id="confirm_password" name="confirm_password" class="form-control" required minlength="8">
-                    <div class="invalid-feedback">Passwords must match.</div>
+                    <input type="password" id="confirm_password" name="confirm_password" class="form-control" data-match="#new_password" required minlength="8">
+                    <div class="invalid-feedback"></div>
                 </div>
 
                 <button type="submit" class="btn btn-outline-primary">Update Password</button>

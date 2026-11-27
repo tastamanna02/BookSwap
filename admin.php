@@ -20,7 +20,6 @@ $allBooks = Book::listAllForAdmin($search);
 $recentSwaps = Swap::listRecentForAdmin(15);
 
 $title = 'Admin Dashboard';
-$pageScript = 'assets/js/admin.js';
 require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'header.php';
 ?>
 
@@ -94,7 +93,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                     </tr>
                 <?php else: ?>
                     <?php foreach ($allBooks as $book): ?>
-                        <tr>
+                        <tr id="admin-book-row-<?= e((string) $book['id']) ?>">
                             <td>#<?= e((string) $book['id']) ?></td>
                             <td>
                                 <a href="<?= e(url('book.php?id=' . (int) $book['id'])) ?>" class="fw-semibold text-decoration-none">
@@ -114,9 +113,9 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                             </td>
                             <td class="text-end">
                                 <button type="button"
-                                        class="btn btn-outline-danger btn-sm js-admin-delete-book"
-                                        data-book-id="<?= e((string) $book['id']) ?>"
-                                        data-book-title="<?= e($book['title']) ?>">
+                                        class="btn btn-outline-danger btn-sm"
+                                        data-delete-book="<?= e((string) $book['id']) ?>"
+                                        data-row="admin-book-row-<?= e((string) $book['id']) ?>">
                                     Delete
                                 </button>
                             </td>
@@ -149,7 +148,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                     </tr>
                 <?php else: ?>
                     <?php foreach ($recentSwaps as $swap): ?>
-                        <tr>
+                        <tr id="admin-book-row-<?= e((string) $book['id']) ?>">
                             <td>#<?= e((string) $swap['id']) ?></td>
                             <td><?= e($swap['requester_name']) ?></td>
                             <td><?= e($swap['offered_book_title']) ?></td>
