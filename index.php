@@ -14,7 +14,7 @@ $query = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
 $categoryId = isset($_GET['category_id']) ? (int) $_GET['category_id'] : 0;
 $condition = isset($_GET['condition']) && is_string($_GET['condition']) ? trim($_GET['condition']) : '';
 
-$categories = Book::getCategories();
+$categories = Book::categories();
 $books = Book::searchAvailable($query, $categoryId, $condition);
 $currentUserId = Auth::id() ?? 0;
 
@@ -71,9 +71,9 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
             <label for="search-condition" class="form-label small fw-semibold mb-1">Condition</label>
             <select id="search-condition" name="condition" class="form-select">
                 <option value="">Any Condition</option>
-                <?php foreach (bookConditions() as $cond): ?>
-                    <option value="<?= e($cond) ?>" <?= $condition === $cond ? 'selected' : '' ?>>
-                        <?= e(ucfirst($cond)) ?>
+                <?php foreach (Book::CONDITIONS as $condValue => $condLabel): ?>
+                    <option value="<?= e($condValue) ?>" <?= $condition === $condValue ? 'selected' : '' ?>>
+                        <?= e($condLabel) ?>
                     </option>
                 <?php endforeach; ?>
             </select>
@@ -116,7 +116,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                     <div class="card-body d-flex flex-column">
                         <div class="d-flex flex-wrap gap-1 mb-2">
                             <span class="badge bg-light text-dark border"><?= e($book['category_name']) ?></span>
-                            <span class="badge bg-info text-dark"><?= e(ucfirst($book['book_condition'])) ?></span>
+                            <span class="badge bg-info text-dark"><?= e(Book::CONDITIONS[$book['book_condition']] ?? ucfirst($book['book_condition'])) ?></span>
                             <?php if ($currentUserId > 0 && (int) $book['owner_id'] === $currentUserId): ?>
                                 <span class="badge bg-secondary">Your Listing</span>
                             <?php endif; ?>

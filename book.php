@@ -15,7 +15,7 @@ if ($bookId === false || $bookId === null || $bookId <= 0) {
     show_404();
 }
 
-$book = Book::findByIdWithOwner($bookId);
+$book = Book::find($bookId);
 if ($book === null) {
     show_404();
 }
@@ -23,7 +23,7 @@ if ($book === null) {
 $currentUserId = Auth::id();
 $isOwner = ($currentUserId !== null && (int) $book['owner_id'] === $currentUserId);
 $myAvailableBooks = ($currentUserId !== null && !$isOwner && $book['status'] === 'available')
-    ? Book::findAvailableByOwner($currentUserId)
+    ? Book::byOwner($currentUserId, true)
     : [];
 
 $title = $book['title'];
@@ -57,7 +57,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
         <div class="card border-0 shadow-sm p-4 mb-4">
             <div class="d-flex flex-wrap gap-2 mb-2">
                 <span class="badge bg-light text-dark border"><?= e($book['category_name']) ?></span>
-                <span class="badge bg-info text-dark"><?= e(ucfirst($book['book_condition'])) ?></span>
+                <span class="badge bg-info text-dark"><?= e(Book::CONDITIONS[$book['book_condition']] ?? ucfirst($book['book_condition'])) ?></span>
                 <span class="badge text-uppercase <?= e(statusBadgeClass($book['status'])) ?>">
                     <?= e($book['status']) ?>
                 </span>
@@ -115,7 +115,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                             <option value="">-- Choose your book --</option>
                             <?php foreach ($myAvailableBooks as $myBook): ?>
                                 <option value="<?= e((string) $myBook['id']) ?>">
-                                    <?= e($myBook['title'] . ' by ' . $myBook['author'] . ' (' . ucfirst($myBook['book_condition']) . ')') ?>
+                                    <?= e($myBook['title'] . ' by ' . $myBook['author'] . ' (' . (Book::CONDITIONS[$myBook['book_condition']] ?? ucfirst($myBook['book_condition'])) . ')') ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>

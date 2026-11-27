@@ -14,7 +14,7 @@ Auth::requireAdmin();
 
 $search = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
 $totalUsers = User::count();
-$bookStats = Book::getStatsForAdmin();
+$bookStats = Book::counts();
 $swapStats = Swap::getStatsForAdmin();
 $allBooks = Book::listAllForAdmin($search);
 $recentSwaps = Swap::listRecentForAdmin(15);
@@ -37,8 +37,8 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
     </div>
     <div class="col-sm-6 col-lg-3">
         <div class="card border-0 shadow-sm p-3 stat-card">
-            <span class="text-muted small">Total Books (<?= e((string) $bookStats['available_books']) ?> available)</span>
-            <span class="h4 fw-bold mb-0"><?= e((string) $bookStats['total_books']) ?></span>
+            <span class="text-muted small">Total Books (<?= e((string) $bookStats['available']) ?> available)</span>
+            <span class="h4 fw-bold mb-0"><?= e((string) $bookStats['total']) ?></span>
         </div>
     </div>
     <div class="col-sm-6 col-lg-3">
@@ -99,7 +99,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                                 <a href="<?= e(url('book.php?id=' . (int) $book['id'])) ?>" class="fw-semibold text-decoration-none">
                                     <?= e($book['title']) ?>
                                 </a>
-                                <div class="text-muted"><?= e($book['author']) ?> &bull; <?= e(ucfirst($book['book_condition'])) ?></div>
+                                <div class="text-muted"><?= e($book['author']) ?> &bull; <?= e(Book::CONDITIONS[$book['book_condition']] ?? ucfirst($book['book_condition'])) ?></div>
                             </td>
                             <td><?= e($book['category_name']) ?></td>
                             <td>

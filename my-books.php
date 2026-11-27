@@ -12,7 +12,7 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'boot
 
 Auth::requireLogin();
 
-$books = Book::findByOwner((int) Auth::id());
+$books = Book::byOwner((int) Auth::id());
 
 $title = 'My Books';
 require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'header.php';
@@ -62,7 +62,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                         </div>
                         <h2 class="h6 card-title mb-1"><?= e($book['title']) ?></h2>
                         <p class="text-muted small mb-3">
-                            by <?= e($book['author']) ?> &bull; <?= e(ucfirst($book['book_condition'])) ?>
+                            by <?= e($book['author']) ?> &bull; <?= e(Book::CONDITIONS[$book['book_condition']] ?? ucfirst($book['book_condition'])) ?>
                         </p>
 
                         <div class="mt-auto">

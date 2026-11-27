@@ -2,8 +2,9 @@
 /**
  * Add / Edit Book Form Page
  *
- * Enforces login, ownership (when editing), CSRF validation, category lookup
- * checks, and secure image uploads verified via finfo and getimagesize().
+ * Supports creating a new listing or editing an existing one (?id=).
+ * Enforces login, ownership (show_404() if missing or not owned), CSRF check,
+ * category validation, and finfo-verified cover uploads via Book::handleUpload().
  */
 
 declare(strict_types=1);
@@ -25,16 +26,10 @@ $isEdit = ($bookId !== false && $bookId !== null && $bookId > 0);
 $existingBook = null;
 
 if ($isEdit) {
-    $existingBook = Book::findByIdWithOwner((int) $bookId);
-    if ($existingBook === null) {
+    $existingBook = Book::find((int) $bookId);
+    // Only allow editing if the book exists AND belongs to the logged-in user
+    if ($existingBook === null || (int) $existingBook['owner_id'] !== $userId) {
         show_404();
-    }
-
-    // Server-side ownership check (never rely on hidden UI buttons)
-    if ((int) $existingBook['owner_id'] !== $userId) {
-        http_response_code(403);
-        flash('danger', 'You do not have permission to edit that book.');
-        redirect('my-books.php');
     }
 
     if ($existingBook['status'] !== 'available') {
@@ -43,7 +38,7 @@ if ($isEdit) {
     }
 }
 
-$categories = Book::getCategories();
+$categories = Book::categories();
 
 $form = [
     'title'          => $existingBook['title'] ?? '',
@@ -67,57 +62,32 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $form['description'] = trim((string) ($_POST['description'] ?? ''));
         $removeImage = isset($_POST['remove_image']) && $_POST['remove_image'] === '1';
 
-        if (mb_strlen($form['title']) < 2 || mb_strlen($form['title']) > 200) {
-            $errors[] = 'Book title must be between 2 and 200 characters.';
+        if ($form['title'] === '' || mb_strlen($form['title']) > 200) {
+            $errors[] = 'Book title is required and must be 200 characters or fewer.';
         }
-        if (mb_strlen($form['author']) < 2 || mb_strlen($form['author']) > 150) {
-            $errors[] = 'Author name must be between 2 and 150 characters.';
+        if ($form['author'] === '' || mb_strlen($form['author']) > 150) {
+            $errors[] = 'Author name is required and must be 150 characters or fewer.';
         }
         if ($form['category_id'] <= 0 || !Book::categoryExists($form['category_id'])) {
             $errors[] = 'Please choose a valid book category.';
         }
-        if (!in_array($form['book_condition'], bookConditions(), true)) {
+        if (!array_key_exists($form['book_condition'], Book::CONDITIONS)) {
             $errors[] = 'Please choose a valid book condition.';
         }
         if (mb_strlen($form['description']) > 2000) {
             $errors[] = 'Description must be 2000 characters or fewer.';
         }
 
-        // Handle optional book image upload
-        $uploadedFilename = null;
-        if (isset($_FILES['image']) && $_FILES['image']['error'] !== UPLOAD_ERR_NO_FILE) {
-            $file = $_FILES['image'];
-            if ($file['error'] !== UPLOAD_ERR_OK) {
-                $errors[] = 'Could not upload the book image. Please try again.';
-            } elseif ((int) $file['size'] > 2 * 1024 * 1024) {
-                $errors[] = 'Book image must be 2 MB or smaller.';
-            } else {
-                $finfo = new finfo(FILEINFO_MIME_TYPE);
-                $mime = $finfo->file($file['tmp_name']);
-                $mimeMap = [
-                    'image/jpeg' => 'jpg',
-                    'image/png'  => 'png',
-                    'image/webp' => 'webp',
-                ];
-
-                if (!is_string($mime) || !isset($mimeMap[$mime]) || @getimagesize($file['tmp_name']) === false) {
-                    $errors[] = 'Book image must be a valid JPG, PNG, or WebP image.';
-                } else {
-                    if (!is_dir(UPLOAD_DIR)) {
-                        mkdir(UPLOAD_DIR, 0755, true);
-                    }
-                    $uploadedFilename = bin2hex(random_bytes(16)) . '.' . $mimeMap[$mime];
-                    $destination = UPLOAD_DIR . DIRECTORY_SEPARATOR . $uploadedFilename;
-                    if (!move_uploaded_file($file['tmp_name'], $destination)) {
-                        $errors[] = 'Could not save the uploaded image. Please try again.';
-                        $uploadedFilename = null;
-                    }
-                }
-            }
+        // Validate and move optional uploaded cover image
+        [$uploadedFilename, $uploadError] = Book::handleUpload($_FILES['image'] ?? []);
+        if ($uploadError !== null) {
+            $errors[] = $uploadError;
         }
 
         if (empty($errors)) {
-            $imageToSave = $form['image'];
+            $oldImage = $form['image'];
+            $imageToSave = $oldImage;
+
             if ($uploadedFilename !== null) {
                 $imageToSave = $uploadedFilename;
             } elseif ($removeImage) {
@@ -134,21 +104,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             ];
 
             if ($isEdit) {
-                $result = Book::updateByOwner((int) $bookId, $userId, $payload);
-                if ($result['ok']) {
-                    flash('success', $result['message']);
-                    redirect('my-books.php');
+                Book::update((int) $bookId, $payload);
+                // Delete old cover image only when replaced or removed
+                if ($imageToSave !== $oldImage) {
+                    Book::deleteImage($oldImage);
                 }
-                Book::removeImageFile($uploadedFilename);
-                $errors[] = $result['message'];
+                flash('success', 'Book updated successfully.');
             } else {
                 Book::create($userId, $payload);
                 flash('success', 'Your book has been listed for swaps!');
-                redirect('my-books.php');
             }
+
+            redirect('my-books.php');
         } else {
-            // Clean up newly uploaded file if form validation failed
-            Book::removeImageFile($uploadedFilename);
+            // Remove newly uploaded image if form validation failed
+            Book::deleteImage($uploadedFilename);
         }
     }
 }
@@ -193,7 +163,6 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                                name="title"
                                class="form-control"
                                required
-                               minlength="2"
                                maxlength="200"
                                value="<?= e($form['title']) ?>">
                         <div class="invalid-feedback"></div>
@@ -206,7 +175,6 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                                name="author"
                                class="form-control"
                                required
-                               minlength="2"
                                maxlength="150"
                                value="<?= e($form['author']) ?>">
                         <div class="invalid-feedback"></div>
@@ -229,9 +197,9 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                     <div class="col-md-6">
                         <label for="book_condition" class="form-label">Condition</label>
                         <select id="book_condition" name="book_condition" class="form-select" required>
-                            <?php foreach (bookConditions() as $cond): ?>
-                                <option value="<?= e($cond) ?>" <?= $form['book_condition'] === $cond ? 'selected' : '' ?>>
-                                    <?= e(ucfirst($cond)) ?>
+                            <?php foreach (Book::CONDITIONS as $condValue => $condLabel): ?>
+                                <option value="<?= e($condValue) ?>" <?= $form['book_condition'] === $condValue ? 'selected' : '' ?>>
+                                    <?= e($condLabel) ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>

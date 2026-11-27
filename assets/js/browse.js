@@ -23,8 +23,8 @@
     let debounceTimer = null;
 
     function formatCondition(cond) {
-        if (!cond) return '';
-        return cond.charAt(0).toUpperCase() + cond.slice(1);
+        const labels = { new: 'Like new', good: 'Good', fair: 'Fair', worn: 'Worn' };
+        return labels[cond] || (cond ? cond.charAt(0).toUpperCase() + cond.slice(1) : '');
     }
 
     function buildBookCard(book) {

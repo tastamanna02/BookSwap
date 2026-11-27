@@ -254,9 +254,10 @@ function setLoading(button, on) {
                     return;
                 }
 
-                const submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
+                const submitBtn = event.submitter || form.querySelector('button[type="submit"], input[type="submit"]');
                 if (submitBtn && submitBtn.tagName === 'BUTTON') {
-                    setLoading(submitBtn, true);
+                    // Defer disabling until after browser builds the POST body (keeps button name/value)
+                    setTimeout(() => setLoading(submitBtn, true), 0);
                 }
             });
         });

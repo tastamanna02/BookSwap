@@ -2,8 +2,8 @@
 /**
  * User Profile Page
  *
- * Allows authenticated users to view their swap stats, update their name,
- * and change their password safely using CSRF and password_verify().
+ * Allows authenticated users to view their activity summary, update their
+ * display name, and change their password safely with CSRF and password_verify().
  */
 
 declare(strict_types=1);
@@ -12,41 +12,45 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'boot
 
 Auth::requireLogin();
 
-$user = Auth::user();
-$userId = (int) $user['id'];
+$authUser = Auth::user();
+$userId = (int) $authUser['id'];
+// Fetch full user row (ID, name, email, role, password_hash) for verification
+$user = User::findByEmail((string) $authUser['email']) ?? $authUser;
+
 $profileErrors = [];
 $passwordErrors = [];
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
-    $formType = (string) ($_POST['form_type'] ?? '');
-
     if (!Csrf::check($_POST['csrf_token'] ?? null)) {
         flash('danger', 'Security token expired. Please try again.');
         redirect('profile.php');
     }
 
-    if ($formType === 'profile') {
+    if (isset($_POST['update_name'])) {
         $name = trim((string) ($_POST['name'] ?? ''));
 
-        if (mb_strlen($name) < 2 || mb_strlen($name) > 100) {
-            $profileErrors[] = 'Name must be between 2 and 100 characters.';
+        if (empty($name) || mb_strlen($name) > 100) {
+            $profileErrors[] = 'Name is required and must be 100 characters or fewer.';
         }
 
         if (empty($profileErrors)) {
             User::updateName($userId, $name);
-            flash('success', 'Profile updated successfully.');
+            // Keep session copy synced if present; Auth::user() also reloads from DB on redirect
+            $_SESSION['user_name'] = $name;
+            flash('success', 'Name updated successfully.');
             redirect('profile.php');
         }
 
         $user['name'] = $name;
-    } elseif ($formType === 'password') {
+    } elseif (isset($_POST['update_password'])) {
         $currentPassword = (string) ($_POST['current_password'] ?? '');
         $newPassword = (string) ($_POST['new_password'] ?? '');
         $confirmPassword = (string) ($_POST['confirm_password'] ?? '');
 
-        if ($currentPassword === '') {
-            $passwordErrors[] = 'Please enter your current password.';
+        if ($currentPassword === '' || !password_verify($currentPassword, (string) ($user['password_hash'] ?? ''))) {
+            $passwordErrors[] = 'Your current password is incorrect.';
         }
+
         if (strlen($newPassword) < 8) {
             $passwordErrors[] = 'New password must be at least 8 characters long.';
         } elseif ($newPassword !== $confirmPassword) {
@@ -54,13 +58,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
 
         if (empty($passwordErrors)) {
-            if (!User::verifyPassword($userId, $currentPassword)) {
-                $passwordErrors[] = 'Your current password is incorrect.';
-            } else {
-                User::updatePassword($userId, $newPassword);
-                flash('success', 'Password updated successfully.');
-                redirect('profile.php');
-            }
+            User::updatePassword($userId, $newPassword);
+            flash('success', 'Password updated successfully.');
+            redirect('profile.php');
         }
     }
 }
@@ -121,7 +121,6 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
 
             <form method="POST" action="<?= e(url('profile.php')) ?>" class="needs-check" novalidate>
                 <?= Csrf::field() ?>
-                <input type="hidden" name="form_type" value="profile">
 
                 <div class="mb-3">
                     <label for="name" class="form-label">Full Name</label>
@@ -130,7 +129,6 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                            name="name"
                            class="form-control"
                            required
-                           minlength="2"
                            maxlength="100"
                            value="<?= e($user['name']) ?>">
                     <div class="invalid-feedback"></div>
@@ -141,7 +139,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                     <input type="email" class="form-control" value="<?= e($user['email']) ?>" disabled>
                 </div>
 
-                <button type="submit" class="btn btn-primary">Save Profile</button>
+                <button type="submit" name="update_name" value="1" class="btn btn-primary">Save Name</button>
             </form>
         </div>
 
@@ -160,7 +158,6 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
 
             <form method="POST" action="<?= e(url('profile.php')) ?>" class="needs-check" novalidate>
                 <?= Csrf::field() ?>
-                <input type="hidden" name="form_type" value="password">
 
                 <div class="mb-3">
                     <label for="current_password" class="form-label">Current Password</label>
@@ -180,7 +177,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                     <div class="invalid-feedback"></div>
                 </div>
 
-                <button type="submit" class="btn btn-outline-primary">Update Password</button>
+                <button type="submit" name="update_password" value="1" class="btn btn-outline-primary">Update Password</button>
             </form>
         </div>
     </div>

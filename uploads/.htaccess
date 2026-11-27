@@ -1,6 +1,6 @@
-# Prevent Apache from executing any PHP or script files placed in uploads/
+# Block directory listing and deny execution/access to script files in uploads/
 Options -Indexes
 
-<FilesMatch "\.(php|phtml|php3|php4|php5|php7|php8|phar)$">
+<FilesMatch "\.(?i:php[0-9]?|phtml|phar)$">
     Require all denied
 </FilesMatch>
