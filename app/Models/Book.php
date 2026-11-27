@@ -343,47 +343,77 @@ class Book
     }
 
     /**
-     * Search and filter currently available books with owner and category names.
+     * Paginated search for available books by title/author and optional category.
+     * Returns ['items', 'total', 'page', 'pages'].
      */
-    public static function searchAvailable(string $query = '', int $categoryId = 0, string $condition = ''): array
+    public static function search(string $q = '', int $categoryId = 0, int $page = 1, int $perPage = 8): array
     {
         $pdo = Database::pdo();
 
-        $sql = "SELECT b.id, b.owner_id, b.category_id, b.title, b.author,
-                       b.book_condition, b.description, b.image, b.status, b.created_at,
-                       u.name AS owner_name,
-                       COALESCE(c.name, 'Uncategorized') AS category_name
-                FROM books b
-                INNER JOIN users u ON b.owner_id = u.id
-                LEFT JOIN categories c ON b.category_id = c.id
-                WHERE b.status = :status";
+        $conditions = ["b.status = 'available'"];
+        $trimmed = trim($q);
+        $like = '';
 
-        $params = [':status' => 'available'];
-
-        $trimmedQuery = trim($query);
-        if ($trimmedQuery !== '') {
-            $like = '%' . self::escapeLike($trimmedQuery) . '%';
-            $sql .= ' AND (b.title LIKE :q1 OR b.author LIKE :q2)';
-            $params[':q1'] = $like;
-            $params[':q2'] = $like;
+        if ($trimmed !== '') {
+            $like = '%' . self::escapeLike($trimmed) . '%';
+            // Two distinct named placeholders because PDO::ATTR_EMULATE_PREPARES is false
+            $conditions[] = '(b.title LIKE :q1 OR b.author LIKE :q2)';
         }
 
         if ($categoryId > 0) {
-            $sql .= ' AND b.category_id = :category_id';
-            $params[':category_id'] = $categoryId;
+            $conditions[] = 'b.category_id = :category_id';
         }
 
-        if ($condition !== '' && array_key_exists($condition, self::CONDITIONS)) {
-            $sql .= ' AND b.book_condition = :condition';
-            $params[':condition'] = $condition;
+        $whereSql = implode(' AND ', $conditions);
+
+        // 1. Count total matching available books first
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM books b WHERE $whereSql");
+        if ($trimmed !== '') {
+            $countStmt->bindValue(':q1', $like, PDO::PARAM_STR);
+            $countStmt->bindValue(':q2', $like, PDO::PARAM_STR);
         }
+        if ($categoryId > 0) {
+            $countStmt->bindValue(':category_id', $categoryId, PDO::PARAM_INT);
+        }
+        $countStmt->execute();
+        $total = (int) $countStmt->fetchColumn();
 
-        $sql .= ' ORDER BY b.created_at DESC, b.id DESC';
+        // 2. Clamp page between 1 and total pages
+        $perPage = max(1, min(50, $perPage));
+        $pages = max(1, (int) ceil($total / $perPage));
+        $page = max(1, min($page, $pages));
+        $offset = ($page - 1) * $perPage;
 
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
+        // 3. Fetch paginated items with owner name and category name joined
+        $selectSql = "SELECT b.id, b.owner_id, b.category_id, b.title, b.author,
+                             b.book_condition, b.description, b.image, b.status, b.created_at,
+                             u.name AS owner_name,
+                             COALESCE(c.name, 'Uncategorized') AS category_name
+                      FROM books b
+                      INNER JOIN users u ON b.owner_id = u.id
+                      LEFT JOIN categories c ON b.category_id = c.id
+                      WHERE $whereSql
+                      ORDER BY b.created_at DESC, b.id DESC
+                      LIMIT :limit OFFSET :offset";
 
-        return $stmt->fetchAll();
+        $stmt = $pdo->prepare($selectSql);
+        if ($trimmed !== '') {
+            $stmt->bindValue(':q1', $like, PDO::PARAM_STR);
+            $stmt->bindValue(':q2', $like, PDO::PARAM_STR);
+        }
+        if ($categoryId > 0) {
+            $stmt->bindValue(':category_id', $categoryId, PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return [
+            'items' => $stmt->fetchAll(),
+            'total' => $total,
+            'page'  => $page,
+            'pages' => $pages,
+        ];
     }
 
     /**
