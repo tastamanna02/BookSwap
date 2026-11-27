@@ -388,6 +388,24 @@ class Swap
     }
 
     /**
+     * Return true if the given book is currently part of an 'accepted' swap.
+     */
+    public static function bookInActiveSwap(int $bookId): bool
+    {
+        $pdo = Database::pdo();
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM swap_requests
+             WHERE status = 'accepted'
+               AND (requested_book_id = :b1 OR offered_book_id = :b2)
+             LIMIT 1"
+        );
+        $stmt->execute([':b1' => $bookId, ':b2' => $bookId]);
+
+        return $stmt->fetchColumn() !== false;
+    }
+
+    /**
      * Count incoming pending swap requests awaiting the given book owner's response.
      */
     public static function pendingIncoming(int $userId): int

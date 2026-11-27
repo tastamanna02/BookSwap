@@ -284,7 +284,7 @@ document.addEventListener('click', async (event) => {
 
     const result = await api('api/book_delete.php', {
         method: 'POST',
-        data: { book_id: bookId },
+        data: { id: bookId },
     });
 
     if (result && result.ok) {
@@ -296,16 +296,18 @@ document.addEventListener('click', async (event) => {
             }
         }
 
-        const myBooksList = document.getElementById('my-books-list');
-        if (myBooksList && myBooksList.querySelectorAll('.js-book-item').length === 0) {
-            const emptyCol = BookSwap.createEl('div', 'col-12');
-            const emptyBox = BookSwap.createEl('div', 'card border-0 shadow-sm p-4 text-center text-muted');
-            emptyBox.appendChild(BookSwap.createEl('p', 'mb-3', 'You have not listed any books yet.'));
+        const myBooksContainer = document.getElementById('my-books-container');
+        const myBooksTbody = document.getElementById('my-books-tbody');
+        if (myBooksContainer && myBooksTbody && myBooksTbody.querySelectorAll('tr').length === 0) {
+            const emptyBox = BookSwap.createEl('div', 'card border-0 shadow-sm p-5 text-center text-muted');
+            emptyBox.appendChild(BookSwap.createEl('h2', 'h5 text-dark mb-2', 'No books listed yet'));
+            emptyBox.appendChild(BookSwap.createEl('p', 'mb-3', 'Share a textbook or novel you have finished so other students can propose a swap.'));
+            const btnWrap = document.createElement('div');
             const addBtn = BookSwap.createEl('a', 'btn btn-primary btn-sm', 'Add Your First Book');
             addBtn.href = buildUrl('book-form.php');
-            emptyBox.appendChild(addBtn);
-            emptyCol.appendChild(emptyBox);
-            myBooksList.replaceChildren(emptyCol);
+            btnWrap.appendChild(addBtn);
+            emptyBox.appendChild(btnWrap);
+            myBooksContainer.replaceChildren(emptyBox);
         }
 
         showAlert(result.message || 'Book deleted successfully.', 'success');

@@ -1,9 +1,9 @@
 <?php
 /**
- * Single Book Details & Swap Request Page
+ * Single Book Details & Swap Request Page (book.php?id=)
  *
- * Displays full book details. Logged-in students who do not own the book
- * can select one of their own available books and send a swap offer via Fetch.
+ * Shows 404 if missing. Displays cover/placeholder, title, author, category,
+ * condition, description, owner name, and listing date, plus role-aware actions.
  */
 
 declare(strict_types=1);
@@ -25,6 +25,8 @@ $isOwner = ($currentUserId !== null && (int) $book['owner_id'] === $currentUserI
 $myAvailableBooks = ($currentUserId !== null && !$isOwner && $book['status'] === 'available')
     ? Book::byOwner($currentUserId, true)
     : [];
+
+$listedDate = date('M j, Y', strtotime((string) $book['created_at']));
 
 $title = $book['title'];
 $pageScript = 'assets/js/book-detail.js';
@@ -57,9 +59,11 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
         <div class="card border-0 shadow-sm p-4 mb-4">
             <div class="d-flex flex-wrap gap-2 mb-2">
                 <span class="badge bg-light text-dark border"><?= e($book['category_name']) ?></span>
-                <span class="badge bg-info text-dark"><?= e(Book::CONDITIONS[$book['book_condition']] ?? ucfirst($book['book_condition'])) ?></span>
-                <span class="badge text-uppercase <?= e(statusBadgeClass($book['status'])) ?>">
-                    <?= e($book['status']) ?>
+                <span class="badge bg-info text-dark">
+                    <?= e(Book::CONDITIONS[$book['book_condition']] ?? ucfirst($book['book_condition'])) ?>
+                </span>
+                <span class="badge <?= e($book['status'] === 'available' ? 'bg-success' : 'bg-warning text-dark') ?>">
+                    <?= e($book['status'] === 'available' ? 'Available' : 'In a swap') ?>
                 </span>
             </div>
 
@@ -73,42 +77,43 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
             </p>
 
             <hr>
-            <p class="small mb-0">
-                <strong>Listed by:</strong> <?= e($book['owner_name']) ?>
-            </p>
+            <div class="d-flex flex-wrap justify-content-between small text-muted gap-2">
+                <span><strong>Owner:</strong> <?= e($book['owner_name']) ?></span>
+                <span><strong>Listed:</strong> <?= e($listedDate) ?></span>
+            </div>
         </div>
 
         <div class="card border-0 shadow-sm p-4">
-            <h2 class="h5 fw-bold mb-3">Request a Book Swap</h2>
+            <h2 class="h5 fw-bold mb-3">Swap Options</h2>
 
-            <?php if ($currentUserId === null): ?>
-                <p class="text-muted mb-3">
-                    Log in with your student account to offer one of your own books in exchange.
-                </p>
-                <a href="<?= e(url('login.php')) ?>" class="btn btn-primary">Log In to Swap</a>
-
-            <?php elseif ($isOwner): ?>
+            <?php if ($isOwner): ?>
                 <p class="text-muted mb-3">This is your own listing.</p>
-                <a href="<?= e(url('my-books.php')) ?>" class="btn btn-outline-primary btn-sm">Manage My Books</a>
-                <?php if ($book['status'] === 'available'): ?>
-                    <a href="<?= e(url('book-form.php?id=' . (int) $book['id'])) ?>" class="btn btn-outline-secondary btn-sm ms-2">Edit Book</a>
-                <?php endif; ?>
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="<?= e(url('book-form.php?id=' . (int) $book['id'])) ?>" class="btn btn-primary btn-sm">Edit Book</a>
+                    <a href="<?= e(url('my-books.php')) ?>" class="btn btn-outline-secondary btn-sm">My Books</a>
+                </div>
+
+            <?php elseif ($currentUserId === null): ?>
+                <p class="text-muted mb-3">
+                    Please <a href="<?= e(url('login.php')) ?>">log in to request a swap</a> for this book.
+                </p>
+                <a href="<?= e(url('login.php')) ?>" class="btn btn-primary btn-sm">Log In</a>
 
             <?php elseif ($book['status'] !== 'available'): ?>
                 <div class="alert alert-warning mb-0">
-                    This book is currently <strong><?= e($book['status']) ?></strong> and cannot accept new swap requests.
+                    This book is currently reserved in an active swap and cannot accept new requests.
                 </div>
 
             <?php elseif (empty($myAvailableBooks)): ?>
                 <p class="text-muted mb-3">
-                    To request a swap, you need at least one available book of your own to offer in exchange.
+                    You need at least one available book of your own to offer in exchange.
                 </p>
-                <a href="<?= e(url('book-form.php')) ?>" class="btn btn-primary btn-sm">+ List a Book First</a>
+                <a href="<?= e(url('book-form.php')) ?>" class="btn btn-primary btn-sm">+ List a Book</a>
 
             <?php else: ?>
                 <div id="swap-form-alert" class="d-none" role="alert"></div>
 
-                <form id="swap-request-form" data-requested-book-id="<?= e((string) $book['id']) ?>" novalidate>
+                <form id="swap-form" data-book-id="<?= e((string) $book['id']) ?>" novalidate>
                     <div class="mb-3">
                         <label for="offered_book_id" class="form-label">Select One of Your Available Books to Offer</label>
                         <select id="offered_book_id" name="offered_book_id" class="form-select" required>

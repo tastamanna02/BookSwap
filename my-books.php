@@ -2,8 +2,8 @@
 /**
  * My Books Page
  *
- * Shows all books listed by the logged-in student (available, reserved, or swapped).
- * Owners can add, edit (available only), or delete via Fetch POST.
+ * Requires login. Displays a responsive Bootstrap table of the logged-in
+ * user's listed books with Edit and Fetch-powered Delete actions.
  */
 
 declare(strict_types=1);
@@ -26,73 +26,69 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
     <a href="<?= e(url('book-form.php')) ?>" class="btn btn-primary">+ Add New Book</a>
 </div>
 
-<div id="my-books-list" class="row g-3">
+<div id="my-books-container">
     <?php if (empty($books)): ?>
-        <div class="col-12">
-            <div class="card border-0 shadow-sm p-4 text-center text-muted">
-                <p class="mb-3">You have not listed any books yet.</p>
-                <div>
-                    <a href="<?= e(url('book-form.php')) ?>" class="btn btn-primary btn-sm">Add Your First Book</a>
-                </div>
+        <div class="card border-0 shadow-sm p-5 text-center text-muted">
+            <h2 class="h5 text-dark mb-2">No books listed yet</h2>
+            <p class="mb-3">Share a textbook or novel you have finished so other students can propose a swap.</p>
+            <div>
+                <a href="<?= e(url('book-form.php')) ?>" class="btn btn-primary btn-sm">Add Your First Book</a>
             </div>
         </div>
     <?php else: ?>
-        <?php foreach ($books as $book): ?>
-            <?php
-            $isSwapped = ((int) $book['is_swapped'] === 1);
-            $displayStatus = $isSwapped ? 'swapped' : $book['status'];
-            ?>
-            <div id="book-row-<?= e((string) $book['id']) ?>" class="col-sm-6 col-lg-4 js-book-item">
-                <div class="card h-100 shadow-sm book-card">
-                    <div class="book-cover-box">
-                        <?php if (!empty($book['image'])): ?>
-                            <img src="<?= e(url('uploads/' . rawurlencode((string) $book['image']))) ?>"
-                                 class="book-cover-img"
-                                 alt="<?= e($book['title']) ?>">
-                        <?php else: ?>
-                            <div class="book-cover-placeholder"><?= e($book['title']) ?></div>
-                        <?php endif; ?>
-                    </div>
-                    <div class="card-body d-flex flex-column">
-                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-1 mb-2">
-                            <span class="badge bg-light text-dark border"><?= e($book['category_name']) ?></span>
-                            <span class="badge text-uppercase <?= e(statusBadgeClass($displayStatus)) ?>">
-                                <?= e($displayStatus) ?>
-                            </span>
-                        </div>
-                        <h2 class="h6 card-title mb-1"><?= e($book['title']) ?></h2>
-                        <p class="text-muted small mb-3">
-                            by <?= e($book['author']) ?> &bull; <?= e(Book::CONDITIONS[$book['book_condition']] ?? ucfirst($book['book_condition'])) ?>
-                        </p>
-
-                        <div class="mt-auto">
-                            <div class="d-flex flex-wrap gap-2">
-                                <a href="<?= e(url('book.php?id=' . (int) $book['id'])) ?>"
-                                   class="btn btn-outline-secondary btn-sm">View</a>
-
-                                <?php if ($book['status'] === 'available'): ?>
+        <div class="card border-0 shadow-sm">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Title &amp; Author</th>
+                            <th class="d-none d-md-table-cell">Category</th>
+                            <th>Status</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="my-books-tbody">
+                        <?php foreach ($books as $book): ?>
+                            <?php
+                            $isAvailable = ($book['status'] === 'available');
+                            $badgeClass = $isAvailable ? 'bg-success' : 'bg-warning text-dark';
+                            $badgeLabel = $isAvailable ? 'Available' : 'In a swap';
+                            $rowId = 'book-' . (int) $book['id'];
+                            ?>
+                            <tr id="<?= e($rowId) ?>">
+                                <td>
+                                    <a href="<?= e(url('book.php?id=' . (int) $book['id'])) ?>"
+                                       class="fw-semibold text-decoration-none">
+                                        <?= e($book['title']) ?>
+                                    </a>
+                                    <div class="small text-muted">by <?= e($book['author']) ?></div>
+                                </td>
+                                <td class="d-none d-md-table-cell">
+                                    <?= e($book['category_name']) ?>
+                                </td>
+                                <td>
+                                    <span class="badge <?= e($badgeClass) ?>">
+                                        <?= e($badgeLabel) ?>
+                                    </span>
+                                </td>
+                                <td class="text-end text-nowrap">
                                     <a href="<?= e(url('book-form.php?id=' . (int) $book['id'])) ?>"
-                                       class="btn btn-outline-primary btn-sm">Edit</a>
+                                       class="btn btn-outline-primary btn-sm me-1">
+                                        Edit
+                                    </a>
                                     <button type="button"
                                             class="btn btn-outline-danger btn-sm"
                                             data-delete-book="<?= e((string) $book['id']) ?>"
-                                            data-row="book-row-<?= e((string) $book['id']) ?>">
+                                            data-row="<?= e($rowId) ?>">
                                         Delete
                                     </button>
-                                <?php endif; ?>
-                            </div>
-                            <?php if ($book['status'] !== 'available'): ?>
-                                <p class="small text-muted mt-2 mb-0">
-                                    <?= $isSwapped
-                                        ? 'Exchanged in a completed swap.'
-                                        : 'Locked while an accepted swap is in progress.' ?>
-                                </p>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
             </div>
-        <?php endforeach; ?>
+        </div>
     <?php endif; ?>
 </div>
 

@@ -7,7 +7,7 @@
 (function () {
     'use strict';
 
-    const swapForm = document.getElementById('swap-request-form');
+    const swapForm = document.getElementById('swap-form');
     if (!swapForm) {
         return;
     }
@@ -20,7 +20,7 @@
         event.preventDefault();
         BookSwap.hideAlert(alertBox);
 
-        const requestedBookId = Number(swapForm.getAttribute('data-requested-book-id') || '0');
+        const requestedBookId = Number(swapForm.getAttribute('data-book-id') || '0');
         const offeredBookId = Number(offeredSelect ? offeredSelect.value : '0');
 
         if (offeredBookId <= 0) {
