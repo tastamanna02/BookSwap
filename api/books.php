@@ -3,7 +3,7 @@
  * API Endpoint: Search Available Books (GET)
  *
  * Public endpoint called by Fetch on index.php to filter available books
- * by keyword, category, and physical condition using prepared statements.
+ * by keyword, category_id, and physical condition using prepared statements.
  */
 
 declare(strict_types=1);
@@ -18,14 +18,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
 }
 
 $query = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
-$category = isset($_GET['category']) && is_string($_GET['category']) ? trim($_GET['category']) : '';
+$categoryId = isset($_GET['category_id']) ? (int) $_GET['category_id'] : 0;
 $condition = isset($_GET['condition']) && is_string($_GET['condition']) ? trim($_GET['condition']) : '';
 
 if (mb_strlen($query) > 100) {
     jsonResponse(['ok' => false, 'message' => 'Search text is too long.'], 400);
 }
 
-$books = Book::searchAvailable($query, $category, $condition);
+$books = Book::searchAvailable($query, $categoryId, $condition);
 
 jsonResponse([
     'ok'    => true,

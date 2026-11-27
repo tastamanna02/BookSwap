@@ -2,9 +2,9 @@
 /**
  * Swap Model
  *
- * Manages the full book-exchange lifecycle:
+ * Manages the swap_requests lifecycle:
  * pending -> accepted -> completed (when BOTH users confirm), or declined / cancelled.
- * Multi-row updates use database transactions with row locking (FOR UPDATE).
+ * Uses database transactions and ordered row locks (FOR UPDATE) for multi-row updates.
  */
 
 declare(strict_types=1);
@@ -18,7 +18,7 @@ use Throwable;
 class Swap
 {
     /**
-     * Lock two book rows in ascending ID order to avoid database deadlocks.
+     * Lock two book rows in ascending ID order to prevent deadlocks.
      */
     private static function lockBooksOrdered(PDO $pdo, int $bookIdA, int $bookIdB): array
     {
@@ -26,7 +26,7 @@ class Swap
         $secondId = max($bookIdA, $bookIdB);
 
         $stmt = $pdo->prepare(
-            'SELECT id, user_id, title, status
+            'SELECT id, owner_id, title, status
              FROM books
              WHERE id IN (?, ?)
              ORDER BY id ASC
@@ -44,12 +44,8 @@ class Swap
     /**
      * Create a new 'pending' swap request offering one of the requester's available books.
      */
-    public static function createRequest(
-        int $requesterId,
-        int $requestedBookId,
-        int $offeredBookId,
-        string $message = ''
-    ): array {
+    public static function createRequest(int $requesterId, int $requestedBookId, int $offeredBookId): array
+    {
         if ($requestedBookId <= 0 || $offeredBookId <= 0) {
             return ['ok' => false, 'message' => 'Please select valid books for the swap.'];
         }
@@ -72,12 +68,12 @@ class Swap
             $requestedBook = $books[$requestedBookId];
             $offeredBook = $books[$offeredBookId];
 
-            if ((int) $offeredBook['user_id'] !== $requesterId) {
+            if ((int) $offeredBook['owner_id'] !== $requesterId) {
                 $pdo->rollBack();
                 return ['ok' => false, 'message' => 'You can only offer a book that you own.'];
             }
 
-            if ((int) $requestedBook['user_id'] === $requesterId) {
+            if ((int) $requestedBook['owner_id'] === $requesterId) {
                 $pdo->rollBack();
                 return ['ok' => false, 'message' => 'You cannot request a swap for your own book.'];
             }
@@ -89,7 +85,7 @@ class Swap
 
             // Prevent duplicate pending or accepted requests for the exact same book pair
             $dupStmt = $pdo->prepare(
-                "SELECT id FROM swaps
+                "SELECT id FROM swap_requests
                  WHERE requester_id = ? AND requested_book_id = ? AND offered_book_id = ?
                    AND status IN ('pending', 'accepted')
                  LIMIT 1"
@@ -100,22 +96,16 @@ class Swap
                 return ['ok' => false, 'message' => 'You already have an active request for this book pair.'];
             }
 
-            $cleanMessage = mb_substr(trim($message), 0, 500);
-
             $insert = $pdo->prepare(
-                "INSERT INTO swaps
-                 (requester_id, owner_id, requested_book_id, offered_book_id,
-                  requested_book_title, offered_book_title, message, status)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')"
+                "INSERT INTO swap_requests
+                 (requester_id, owner_id, requested_book_id, offered_book_id, status)
+                 VALUES (?, ?, ?, ?, 'pending')"
             );
             $insert->execute([
                 $requesterId,
-                (int) $requestedBook['user_id'],
+                (int) $requestedBook['owner_id'],
                 $requestedBookId,
                 $offeredBookId,
-                $requestedBook['title'],
-                $offeredBook['title'],
-                $cleanMessage !== '' ? $cleanMessage : null,
             ]);
 
             $swapId = (int) $pdo->lastInsertId();
@@ -136,7 +126,7 @@ class Swap
 
     /**
      * Dispatch a swap state transition ('accept', 'decline', 'cancel', or 'confirm')
-     * inside a database transaction with server-side authorization checks.
+     * inside a database transaction with server-side participant checks.
      */
     public static function handleAction(int $swapId, int $userId, string $action): array
     {
@@ -148,7 +138,7 @@ class Swap
         $pdo->beginTransaction();
 
         try {
-            $stmt = $pdo->prepare('SELECT * FROM swaps WHERE id = ? FOR UPDATE');
+            $stmt = $pdo->prepare('SELECT * FROM swap_requests WHERE id = ? FOR UPDATE');
             $stmt->execute([$swapId]);
             $swap = $stmt->fetch();
 
@@ -208,12 +198,8 @@ class Swap
             return ['ok' => false, 'message' => 'Only pending requests can be accepted.'];
         }
 
-        $reqBookId = $swap['requested_book_id'] !== null ? (int) $swap['requested_book_id'] : 0;
-        $offBookId = $swap['offered_book_id'] !== null ? (int) $swap['offered_book_id'] : 0;
-
-        if ($reqBookId <= 0 || $offBookId <= 0) {
-            return ['ok' => false, 'message' => 'One of the books in this swap no longer exists.'];
-        }
+        $reqBookId = (int) $swap['requested_book_id'];
+        $offBookId = (int) $swap['offered_book_id'];
 
         $books = self::lockBooksOrdered($pdo, $reqBookId, $offBookId);
         if (!isset($books[$reqBookId], $books[$offBookId])) {
@@ -221,19 +207,19 @@ class Swap
         }
 
         if ($books[$reqBookId]['status'] !== 'available' || $books[$offBookId]['status'] !== 'available') {
-            return ['ok' => false, 'message' => 'One of these books is already reserved or swapped.'];
+            return ['ok' => false, 'message' => 'One of these books is already reserved.'];
         }
 
-        $updateSwap = $pdo->prepare("UPDATE swaps SET status = 'accepted' WHERE id = ?");
-        $updateSwap->execute([(int) $swap['id']]);
+        $pdo->prepare("UPDATE swap_requests SET status = 'accepted' WHERE id = ?")
+            ->execute([(int) $swap['id']]);
 
         // Reserve both books so neither can be double-booked during handoff
-        $reserveBooks = $pdo->prepare("UPDATE books SET status = 'reserved' WHERE id IN (?, ?)");
-        $reserveBooks->execute([$reqBookId, $offBookId]);
+        $pdo->prepare("UPDATE books SET status = 'reserved' WHERE id IN (?, ?)")
+            ->execute([$reqBookId, $offBookId]);
 
-        // Auto-decline any other pending requests involving either of the reserved books
+        // Auto-decline any competing pending requests involving either reserved book
         $declineOthers = $pdo->prepare(
-            "UPDATE swaps
+            "UPDATE swap_requests
              SET status = 'declined'
              WHERE id <> :swap_id
                AND status = 'pending'
@@ -269,8 +255,8 @@ class Swap
             return ['ok' => false, 'message' => 'Only pending requests can be declined.'];
         }
 
-        $stmt = $pdo->prepare("UPDATE swaps SET status = 'declined' WHERE id = ?");
-        $stmt->execute([(int) $swap['id']]);
+        $pdo->prepare("UPDATE swap_requests SET status = 'declined' WHERE id = ?")
+            ->execute([(int) $swap['id']]);
 
         return ['ok' => true, 'message' => 'Swap request declined.'];
     }
@@ -285,27 +271,23 @@ class Swap
                 return ['ok' => false, 'message' => 'Use Decline to reject an incoming pending request.'];
             }
 
-            $stmt = $pdo->prepare("UPDATE swaps SET status = 'cancelled' WHERE id = ?");
-            $stmt->execute([(int) $swap['id']]);
+            $pdo->prepare("UPDATE swap_requests SET status = 'cancelled' WHERE id = ?")
+                ->execute([(int) $swap['id']]);
+
             return ['ok' => true, 'message' => 'Swap request cancelled.'];
         }
 
         if ($swap['status'] === 'accepted') {
-            $stmt = $pdo->prepare("UPDATE swaps SET status = 'cancelled' WHERE id = ?");
-            $stmt->execute([(int) $swap['id']]);
+            $pdo->prepare("UPDATE swap_requests SET status = 'cancelled' WHERE id = ?")
+                ->execute([(int) $swap['id']]);
 
-            $reqBookId = $swap['requested_book_id'] !== null ? (int) $swap['requested_book_id'] : 0;
-            $offBookId = $swap['offered_book_id'] !== null ? (int) $swap['offered_book_id'] : 0;
+            $reqBookId = (int) $swap['requested_book_id'];
+            $offBookId = (int) $swap['offered_book_id'];
 
-            if ($reqBookId > 0 && $offBookId > 0) {
-                self::lockBooksOrdered($pdo, $reqBookId, $offBookId);
-                $release = $pdo->prepare(
-                    "UPDATE books
-                     SET status = 'available'
-                     WHERE status = 'reserved' AND id IN (?, ?)"
-                );
-                $release->execute([$reqBookId, $offBookId]);
-            }
+            self::lockBooksOrdered($pdo, $reqBookId, $offBookId);
+            $pdo->prepare(
+                "UPDATE books SET status = 'available' WHERE status = 'reserved' AND id IN (?, ?)"
+            )->execute([$reqBookId, $offBookId]);
 
             return ['ok' => true, 'message' => 'Accepted swap cancelled. Both books are available again.'];
         }
@@ -314,8 +296,8 @@ class Swap
     }
 
     /**
-     * Record a participant's confirmation. Only marks swap 'completed' and books
-     * 'swapped' once BOTH the requester and owner have confirmed.
+     * Record a participant's confirmation. Only completes the swap once BOTH
+     * requester_confirmed and owner_confirmed equal 1.
      */
     private static function confirmSwap(PDO $pdo, array $swap, bool $isRequester): array
     {
@@ -331,33 +313,22 @@ class Swap
                 return ['ok' => false, 'message' => 'You have already confirmed this swap.'];
             }
             $reqConfirmed = 1;
-            $pdo->prepare(
-                'UPDATE swaps SET requester_confirmed = 1, requester_confirmed_at = NOW() WHERE id = ?'
-            )->execute([(int) $swap['id']]);
+            $pdo->prepare('UPDATE swap_requests SET requester_confirmed = 1 WHERE id = ?')
+                ->execute([(int) $swap['id']]);
         } else {
             if ($ownerConfirmed === 1) {
                 return ['ok' => false, 'message' => 'You have already confirmed this swap.'];
             }
             $ownerConfirmed = 1;
-            $pdo->prepare(
-                'UPDATE swaps SET owner_confirmed = 1, owner_confirmed_at = NOW() WHERE id = ?'
-            )->execute([(int) $swap['id']]);
+            $pdo->prepare('UPDATE swap_requests SET owner_confirmed = 1 WHERE id = ?')
+                ->execute([(int) $swap['id']]);
         }
 
         // Complete the swap only when BOTH users have confirmed
         if ($reqConfirmed === 1 && $ownerConfirmed === 1) {
             $pdo->prepare(
-                "UPDATE swaps SET status = 'completed', completed_at = NOW() WHERE id = ?"
+                "UPDATE swap_requests SET status = 'completed', completed_at = NOW() WHERE id = ?"
             )->execute([(int) $swap['id']]);
-
-            $reqBookId = $swap['requested_book_id'] !== null ? (int) $swap['requested_book_id'] : 0;
-            $offBookId = $swap['offered_book_id'] !== null ? (int) $swap['offered_book_id'] : 0;
-
-            if ($reqBookId > 0 && $offBookId > 0) {
-                self::lockBooksOrdered($pdo, $reqBookId, $offBookId);
-                $pdo->prepare("UPDATE books SET status = 'swapped' WHERE id IN (?, ?)")
-                    ->execute([$reqBookId, $offBookId]);
-            }
 
             return [
                 'ok'        => true,
@@ -380,18 +351,20 @@ class Swap
     {
         $pdo = Database::getConnection();
         $stmt = $pdo->prepare(
-            'SELECT s.*,
-                    req.name AS requester_name, req.university AS requester_university,
-                    own.name AS owner_name, own.university AS owner_university,
-                    rb.cover_image AS requested_book_cover,
-                    ob.cover_image AS offered_book_cover
-             FROM swaps s
-             INNER JOIN users req ON s.requester_id = req.id
-             INNER JOIN users own ON s.owner_id = own.id
-             LEFT JOIN books rb ON s.requested_book_id = rb.id
-             LEFT JOIN books ob ON s.offered_book_id = ob.id
-             WHERE s.requester_id = :u1 OR s.owner_id = :u2
-             ORDER BY s.updated_at DESC, s.id DESC'
+            'SELECT sr.*,
+                    req.name AS requester_name,
+                    own.name AS owner_name,
+                    rb.title AS requested_book_title,
+                    rb.image AS requested_book_image,
+                    ob.title AS offered_book_title,
+                    ob.image AS offered_book_image
+             FROM swap_requests sr
+             INNER JOIN users req ON sr.requester_id = req.id
+             INNER JOIN users own ON sr.owner_id = own.id
+             INNER JOIN books rb ON sr.requested_book_id = rb.id
+             INNER JOIN books ob ON sr.offered_book_id = ob.id
+             WHERE sr.requester_id = :u1 OR sr.owner_id = :u2
+             ORDER BY sr.updated_at DESC, sr.id DESC'
         );
         $stmt->execute([':u1' => $userId, ':u2' => $userId]);
 
@@ -427,7 +400,7 @@ class Swap
     {
         $pdo = Database::getConnection();
         $stmt = $pdo->prepare(
-            "SELECT COUNT(*) FROM swaps
+            "SELECT COUNT(*) FROM swap_requests
              WHERE status = 'completed' AND (requester_id = :u1 OR owner_id = :u2)"
         );
         $stmt->execute([':u1' => $userId, ':u2' => $userId]);
@@ -446,7 +419,7 @@ class Swap
                 SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_swaps,
                 SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) AS accepted_swaps,
                 SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed_swaps
-             FROM swaps"
+             FROM swap_requests"
         );
         $row = $stmt->fetch();
 
@@ -458,19 +431,24 @@ class Swap
     }
 
     /**
-     * List recent swaps across the platform for the admin dashboard.
+     * List recent swap requests across the platform for the admin dashboard.
      */
     public static function listRecentForAdmin(int $limit = 15): array
     {
         $pdo = Database::getConnection();
         $stmt = $pdo->prepare(
-            'SELECT s.id, s.requested_book_title, s.offered_book_title, s.status,
-                    s.requester_confirmed, s.owner_confirmed, s.created_at, s.completed_at,
-                    req.name AS requester_name, own.name AS owner_name
-             FROM swaps s
-             INNER JOIN users req ON s.requester_id = req.id
-             INNER JOIN users own ON s.owner_id = own.id
-             ORDER BY s.created_at DESC, s.id DESC
+            'SELECT sr.id, sr.status, sr.requester_confirmed, sr.owner_confirmed,
+                    sr.created_at, sr.completed_at,
+                    rb.title AS requested_book_title,
+                    ob.title AS offered_book_title,
+                    req.name AS requester_name,
+                    own.name AS owner_name
+             FROM swap_requests sr
+             INNER JOIN users req ON sr.requester_id = req.id
+             INNER JOIN users own ON sr.owner_id = own.id
+             INNER JOIN books rb ON sr.requested_book_id = rb.id
+             INNER JOIN books ob ON sr.offered_book_id = ob.id
+             ORDER BY sr.created_at DESC, sr.id DESC
              LIMIT ?'
         );
         $stmt->bindValue(1, $limit, PDO::PARAM_INT);

@@ -133,8 +133,8 @@
                     }
                 }
 
-                // Check cover image size/type client-side before upload
-                const fileInput = form.querySelector('input[type="file"][name="cover_image"]');
+                // Check book image size/type client-side before upload
+                const fileInput = form.querySelector('input[type="file"][name="image"]');
                 if (fileInput && fileInput.files && fileInput.files.length > 0) {
                     const file = fileInput.files[0];
                     const allowed = ['image/jpeg', 'image/png', 'image/webp'];

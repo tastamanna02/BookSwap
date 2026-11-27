@@ -105,9 +105,9 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                                 <a href="<?= e(url('book.php?id=' . (int) $book['id'])) ?>" class="fw-semibold text-decoration-none">
                                     <?= e($book['title']) ?>
                                 </a>
-                                <div class="text-muted"><?= e($book['author']) ?> &bull; <?= e($book['book_condition']) ?></div>
+                                <div class="text-muted"><?= e($book['author']) ?> &bull; <?= e(ucfirst($book['book_condition'])) ?></div>
                             </td>
-                            <td><?= e($book['category']) ?></td>
+                            <td><?= e($book['category_name']) ?></td>
                             <td>
                                 <?= e($book['owner_name']) ?>
                                 <div class="text-muted"><?= e($book['owner_email']) ?></div>

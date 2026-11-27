@@ -20,19 +20,26 @@
     const outgoingBadge = document.getElementById('outgoing-count');
     const historyBadge = document.getElementById('history-count');
 
+    function makeActionButton(swapId, action, label, className) {
+        const btn = BookSwap.createEl('button', className, label);
+        btn.type = 'button';
+        btn.classList.add('js-swap-action');
+        btn.setAttribute('data-swap-id', String(swapId));
+        btn.setAttribute('data-action', action);
+        return btn;
+    }
+
     function buildSwapCard(swap, mode) {
         const card = BookSwap.createEl('div', 'card shadow-sm mb-3');
         const body = BookSwap.createEl('div', 'card-body');
 
         const header = BookSwap.createEl('div', 'd-flex flex-wrap justify-content-between align-items-center gap-2 mb-2');
-        const titleWrap = BookSwap.createEl('div', '');
         const headingText = mode === 'incoming'
             ? swap.requester_name + ' wants your book'
             : (mode === 'outgoing'
                 ? 'You requested ' + swap.owner_name + "'s book"
                 : swap.requester_name + ' \u21C4 ' + swap.owner_name);
-        titleWrap.appendChild(BookSwap.createEl('h3', 'h6 mb-0', headingText));
-        header.appendChild(titleWrap);
+        header.appendChild(BookSwap.createEl('h3', 'h6 mb-0', headingText));
 
         const badge = BookSwap.createEl(
             'span',
@@ -56,11 +63,6 @@
         exchangeRow.appendChild(colRight);
         body.appendChild(exchangeRow);
 
-        if (swap.message) {
-            const note = BookSwap.createEl('p', 'small text-secondary mb-2', 'Note: "' + swap.message + '"');
-            body.appendChild(note);
-        }
-
         // Dual confirmation status for accepted swaps
         if (swap.status === 'accepted') {
             const isOwner = Number(swap.owner_id) === currentUserId;
@@ -74,14 +76,13 @@
             body.appendChild(statusBox);
         }
 
-        // Timestamp info
+        // Timestamp info and action buttons
         const dateText = swap.completed_at
             ? 'Completed: ' + swap.completed_at
             : 'Created: ' + swap.created_at;
         const footer = BookSwap.createEl('div', 'd-flex flex-wrap justify-content-between align-items-center gap-2');
         footer.appendChild(BookSwap.createEl('span', 'small text-muted', dateText));
 
-        // Action buttons (for active tabs)
         const actions = BookSwap.createEl('div', 'd-flex flex-wrap gap-2');
         if (swap.status === 'pending' && mode === 'incoming') {
             actions.appendChild(makeActionButton(swap.id, 'accept', 'Accept', 'btn btn-success btn-sm'));
@@ -104,15 +105,6 @@
         body.appendChild(footer);
         card.appendChild(body);
         return card;
-    }
-
-    function makeActionButton(swapId, action, label, className) {
-        const btn = BookSwap.createEl('button', className, label);
-        btn.type = 'button';
-        btn.classList.add('js-swap-action');
-        btn.setAttribute('data-swap-id', String(swapId));
-        btn.setAttribute('data-action', action);
-        return btn;
     }
 
     function renderSection(container, items, mode, emptyMessage) {

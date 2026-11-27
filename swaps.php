@@ -54,10 +54,6 @@ $renderSwapCard = static function (array $swap, string $mode) use ($userId): str
                 </div>
             </div>
 
-            <?php if (!empty($swap['message'])): ?>
-                <p class="small text-secondary mb-2">Note: &ldquo;<?= e($swap['message']) ?>&rdquo;</p>
-            <?php endif; ?>
-
             <?php if ($swap['status'] === 'accepted'): ?>
                 <?php
                 $myConfirmed = $isOwner ? ((int) $swap['owner_confirmed'] === 1) : ((int) $swap['requester_confirmed'] === 1);

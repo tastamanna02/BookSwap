@@ -2,8 +2,8 @@
 /**
  * Book Model
  *
- * Manages book listings, search/filtering, owner edits, and transactional
- * deletions (by owner or admin) while keeping swap state consistent.
+ * Manages book listings, categories lookup, search/filtering, owner edits,
+ * and transactional deletions (by owner or admin) aligned with schema.sql.
  */
 
 declare(strict_types=1);
@@ -11,7 +11,6 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Core\Database;
-use PDO;
 use Throwable;
 
 class Book
@@ -25,15 +24,15 @@ class Book
     }
 
     /**
-     * Safely delete an uploaded cover image file from the uploads/ directory.
+     * Safely delete an uploaded book image file from the uploads/ directory.
      */
-    public static function removeCoverFile(?string $filename): void
+    public static function removeImageFile(?string $filename): void
     {
         if ($filename === null || $filename === '') {
             return;
         }
 
-        // basename() prevents directory traversal attacks like ../../config/database.php
+        // basename() prevents directory traversal attacks
         $safeName = basename($filename);
         $fullPath = UPLOAD_DIR . DIRECTORY_SEPARATOR . $safeName;
         if (is_file($fullPath)) {
@@ -42,17 +41,40 @@ class Book
     }
 
     /**
-     * Search and filter currently available books with owner metadata.
+     * Fetch all categories from the categories table in insertion order.
      */
-    public static function searchAvailable(string $query = '', string $category = '', string $condition = ''): array
+    public static function getCategories(): array
+    {
+        $pdo = Database::getConnection();
+        $stmt = $pdo->query('SELECT id, name FROM categories ORDER BY id ASC');
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * Verify that a given category_id exists in the categories table.
+     */
+    public static function categoryExists(int $categoryId): bool
+    {
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare('SELECT 1 FROM categories WHERE id = ? LIMIT 1');
+        $stmt->execute([$categoryId]);
+        return $stmt->fetchColumn() !== false;
+    }
+
+    /**
+     * Search and filter currently available books with owner and category names.
+     */
+    public static function searchAvailable(string $query = '', int $categoryId = 0, string $condition = ''): array
     {
         $pdo = Database::getConnection();
 
-        $sql = 'SELECT b.id, b.user_id, b.title, b.author, b.isbn, b.category,
-                       b.book_condition, b.description, b.cover_image, b.status, b.created_at,
-                       u.name AS owner_name, u.university AS owner_university
+        $sql = 'SELECT b.id, b.owner_id, b.category_id, b.title, b.author,
+                       b.book_condition, b.description, b.image, b.status, b.created_at,
+                       u.name AS owner_name,
+                       COALESCE(c.name, "Uncategorized") AS category_name
                 FROM books b
-                INNER JOIN users u ON b.user_id = u.id
+                INNER JOIN users u ON b.owner_id = u.id
+                LEFT JOIN categories c ON b.category_id = c.id
                 WHERE b.status = :status';
 
         $params = [':status' => 'available'];
@@ -61,15 +83,14 @@ class Book
         if ($trimmedQuery !== '') {
             $like = '%' . self::escapeLike($trimmedQuery) . '%';
             // Distinct named parameters are required when PDO::ATTR_EMULATE_PREPARES is false
-            $sql .= ' AND (b.title LIKE :q1 OR b.author LIKE :q2 OR b.isbn LIKE :q3)';
+            $sql .= ' AND (b.title LIKE :q1 OR b.author LIKE :q2)';
             $params[':q1'] = $like;
             $params[':q2'] = $like;
-            $params[':q3'] = $like;
         }
 
-        if ($category !== '' && in_array($category, bookCategories(), true)) {
-            $sql .= ' AND b.category = :category';
-            $params[':category'] = $category;
+        if ($categoryId > 0) {
+            $sql .= ' AND b.category_id = :category_id';
+            $params[':category_id'] = $categoryId;
         }
 
         if ($condition !== '' && in_array($condition, bookConditions(), true)) {
@@ -86,18 +107,19 @@ class Book
     }
 
     /**
-     * Fetch a single book with its owner details, or null if not found.
+     * Fetch a single book with its owner name and category name, or null if not found.
      */
     public static function findByIdWithOwner(int $bookId): ?array
     {
         $pdo = Database::getConnection();
         $stmt = $pdo->prepare(
-            'SELECT b.id, b.user_id, b.title, b.author, b.isbn, b.category,
-                    b.book_condition, b.description, b.cover_image, b.status,
-                    b.created_at, b.updated_at,
-                    u.name AS owner_name, u.university AS owner_university, u.bio AS owner_bio
+            'SELECT b.id, b.owner_id, b.category_id, b.title, b.author,
+                    b.book_condition, b.description, b.image, b.status, b.created_at,
+                    u.name AS owner_name,
+                    COALESCE(c.name, "Uncategorized") AS category_name
              FROM books b
-             INNER JOIN users u ON b.user_id = u.id
+             INNER JOIN users u ON b.owner_id = u.id
+             LEFT JOIN categories c ON b.category_id = c.id
              WHERE b.id = ?
              LIMIT 1'
         );
@@ -108,36 +130,43 @@ class Book
     }
 
     /**
-     * List all books owned by a user (active/reserved first, then available, then swapped).
+     * List all books owned by a user, along with whether a reserved book has completed a swap.
      */
-    public static function findByUser(int $userId): array
+    public static function findByOwner(int $ownerId): array
     {
         $pdo = Database::getConnection();
         $stmt = $pdo->prepare(
-            "SELECT id, user_id, title, author, isbn, category, book_condition,
-                    description, cover_image, status, created_at
-             FROM books
-             WHERE user_id = ?
-             ORDER BY FIELD(status, 'reserved', 'available', 'swapped'), created_at DESC, id DESC"
+            "SELECT b.id, b.owner_id, b.category_id, b.title, b.author,
+                    b.book_condition, b.description, b.image, b.status, b.created_at,
+                    COALESCE(c.name, 'Uncategorized') AS category_name,
+                    EXISTS(
+                        SELECT 1 FROM swap_requests sr
+                        WHERE sr.status = 'completed'
+                          AND (sr.requested_book_id = b.id OR sr.offered_book_id = b.id)
+                    ) AS is_swapped
+             FROM books b
+             LEFT JOIN categories c ON b.category_id = c.id
+             WHERE b.owner_id = ?
+             ORDER BY FIELD(b.status, 'available', 'reserved'), b.created_at DESC, b.id DESC"
         );
-        $stmt->execute([$userId]);
+        $stmt->execute([$ownerId]);
 
         return $stmt->fetchAll();
     }
 
     /**
-     * List only 'available' books owned by a user (used when picking a book to offer).
+     * List only 'available' books owned by a user (used when choosing a book to offer).
      */
-    public static function findAvailableByUser(int $userId): array
+    public static function findAvailableByOwner(int $ownerId): array
     {
         $pdo = Database::getConnection();
         $stmt = $pdo->prepare(
             'SELECT id, title, author, book_condition
              FROM books
-             WHERE user_id = ? AND status = ?
+             WHERE owner_id = ? AND status = ?
              ORDER BY created_at DESC'
         );
-        $stmt->execute([$userId, 'available']);
+        $stmt->execute([$ownerId, 'available']);
 
         return $stmt->fetchAll();
     }
@@ -145,23 +174,22 @@ class Book
     /**
      * Create a new book listing owned by the given user.
      */
-    public static function create(int $userId, array $data): int
+    public static function create(int $ownerId, array $data): int
     {
         $pdo = Database::getConnection();
         $stmt = $pdo->prepare(
             'INSERT INTO books
-             (user_id, title, author, isbn, category, book_condition, description, cover_image, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+             (owner_id, category_id, title, author, book_condition, description, image, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
-            $userId,
+            $ownerId,
+            $data['category_id'],
             $data['title'],
             $data['author'],
-            $data['isbn'] !== '' ? $data['isbn'] : null,
-            $data['category'],
             $data['book_condition'],
             $data['description'] !== '' ? $data['description'] : null,
-            $data['cover_image'] ?? null,
+            $data['image'] ?? null,
             'available',
         ]);
 
@@ -169,16 +197,16 @@ class Book
     }
 
     /**
-     * Update a book listing after verifying ownership and that it is still available.
+     * Update a book listing after verifying ownership and 'available' status.
      */
-    public static function updateByOwner(int $bookId, int $userId, array $data): array
+    public static function updateByOwner(int $bookId, int $ownerId, array $data): array
     {
         $pdo = Database::getConnection();
         $pdo->beginTransaction();
 
         try {
             $stmt = $pdo->prepare(
-                'SELECT id, user_id, status, cover_image
+                'SELECT id, owner_id, status, image
                  FROM books
                  WHERE id = ?
                  FOR UPDATE'
@@ -191,41 +219,40 @@ class Book
                 return ['ok' => false, 'message' => 'Book not found.'];
             }
 
-            if ((int) $existing['user_id'] !== $userId) {
+            if ((int) $existing['owner_id'] !== $ownerId) {
                 $pdo->rollBack();
                 return ['ok' => false, 'message' => 'You can only edit your own books.'];
             }
 
             if ($existing['status'] !== 'available') {
                 $pdo->rollBack();
-                return ['ok' => false, 'message' => 'Books in an active or completed swap cannot be edited.'];
+                return ['ok' => false, 'message' => 'Reserved or swapped books cannot be edited.'];
             }
 
-            $newCover = array_key_exists('cover_image', $data) ? $data['cover_image'] : $existing['cover_image'];
+            $newImage = array_key_exists('image', $data) ? $data['image'] : $existing['image'];
 
             $update = $pdo->prepare(
                 'UPDATE books
-                 SET title = ?, author = ?, isbn = ?, category = ?,
-                     book_condition = ?, description = ?, cover_image = ?
-                 WHERE id = ? AND user_id = ?'
+                 SET category_id = ?, title = ?, author = ?,
+                     book_condition = ?, description = ?, image = ?
+                 WHERE id = ? AND owner_id = ?'
             );
             $update->execute([
+                $data['category_id'],
                 $data['title'],
                 $data['author'],
-                $data['isbn'] !== '' ? $data['isbn'] : null,
-                $data['category'],
                 $data['book_condition'],
                 $data['description'] !== '' ? $data['description'] : null,
-                $newCover,
+                $newImage,
                 $bookId,
-                $userId,
+                $ownerId,
             ]);
 
             $pdo->commit();
 
-            // Delete old cover image only after the database update succeeds
-            if ($newCover !== $existing['cover_image']) {
-                self::removeCoverFile($existing['cover_image']);
+            // Delete old image only after the database update succeeds
+            if ($newImage !== $existing['image']) {
+                self::removeImageFile($existing['image']);
             }
 
             return ['ok' => true, 'message' => 'Book updated successfully.'];
@@ -238,16 +265,17 @@ class Book
     }
 
     /**
-     * Delete an owner's available book inside a transaction, cancelling any pending requests.
+     * Delete an owner's available book inside a transaction.
+     * Cascading FKs clean up any pending swap_requests referencing this book.
      */
-    public static function deleteByOwner(int $bookId, int $userId): array
+    public static function deleteByOwner(int $bookId, int $ownerId): array
     {
         $pdo = Database::getConnection();
         $pdo->beginTransaction();
 
         try {
             $stmt = $pdo->prepare(
-                'SELECT id, user_id, status, cover_image
+                'SELECT id, owner_id, status, image
                  FROM books
                  WHERE id = ?
                  FOR UPDATE'
@@ -260,7 +288,7 @@ class Book
                 return ['ok' => false, 'message' => 'Book not found.'];
             }
 
-            if ((int) $book['user_id'] !== $userId) {
+            if ((int) $book['owner_id'] !== $ownerId) {
                 $pdo->rollBack();
                 return ['ok' => false, 'message' => 'You do not have permission to delete this book.'];
             }
@@ -270,20 +298,11 @@ class Book
                 return ['ok' => false, 'message' => 'Reserved or swapped books cannot be deleted.'];
             }
 
-            // Cancel any pending swap requests involving this book before removing it
-            $cancelPending = $pdo->prepare(
-                "UPDATE swaps
-                 SET status = 'cancelled'
-                 WHERE status = 'pending'
-                   AND (requested_book_id = :b1 OR offered_book_id = :b2)"
-            );
-            $cancelPending->execute([':b1' => $bookId, ':b2' => $bookId]);
-
-            $del = $pdo->prepare('DELETE FROM books WHERE id = ? AND user_id = ?');
-            $del->execute([$bookId, $userId]);
+            $del = $pdo->prepare('DELETE FROM books WHERE id = ? AND owner_id = ?');
+            $del->execute([$bookId, $ownerId]);
 
             $pdo->commit();
-            self::removeCoverFile($book['cover_image']);
+            self::removeImageFile($book['image']);
 
             return ['ok' => true, 'message' => 'Book deleted successfully.'];
         } catch (Throwable $e) {
@@ -296,7 +315,7 @@ class Book
 
     /**
      * Admin deletion of any book inside a transaction.
-     * Cancels active swaps and frees any reserved partner book back to 'available'.
+     * Frees any partner book that was reserved in an accepted swap before deleting.
      */
     public static function deleteByAdmin(int $bookId): array
     {
@@ -304,7 +323,7 @@ class Book
         $pdo->beginTransaction();
 
         try {
-            $stmt = $pdo->prepare('SELECT id, cover_image FROM books WHERE id = ? FOR UPDATE');
+            $stmt = $pdo->prepare('SELECT id, image FROM books WHERE id = ? FOR UPDATE');
             $stmt->execute([$bookId]);
             $book = $stmt->fetch();
 
@@ -313,30 +332,25 @@ class Book
                 return ['ok' => false, 'message' => 'Book not found.'];
             }
 
-            // Lock any open (pending/accepted) swaps touching this book
+            // Find any accepted swaps involving this book so the partner's book is un-reserved
             $swapStmt = $pdo->prepare(
-                "SELECT id, requested_book_id, offered_book_id, status
-                 FROM swaps
-                 WHERE status IN ('pending', 'accepted')
+                "SELECT requested_book_id, offered_book_id
+                 FROM swap_requests
+                 WHERE status = 'accepted'
                    AND (requested_book_id = :b1 OR offered_book_id = :b2)
                  FOR UPDATE"
             );
             $swapStmt->execute([':b1' => $bookId, ':b2' => $bookId]);
-            $openSwaps = $swapStmt->fetchAll();
 
-            // Release any partner book that was reserved in an accepted swap
             $partnerIds = [];
-            foreach ($openSwaps as $swap) {
-                if ($swap['status'] === 'accepted') {
-                    $reqId = $swap['requested_book_id'] !== null ? (int) $swap['requested_book_id'] : null;
-                    $offId = $swap['offered_book_id'] !== null ? (int) $swap['offered_book_id'] : null;
-
-                    if ($reqId !== null && $reqId !== $bookId) {
-                        $partnerIds[] = $reqId;
-                    }
-                    if ($offId !== null && $offId !== $bookId) {
-                        $partnerIds[] = $offId;
-                    }
+            foreach ($swapStmt->fetchAll() as $swap) {
+                $reqId = (int) $swap['requested_book_id'];
+                $offId = (int) $swap['offered_book_id'];
+                if ($reqId !== $bookId) {
+                    $partnerIds[] = $reqId;
+                }
+                if ($offId !== $bookId) {
+                    $partnerIds[] = $offId;
                 }
             }
 
@@ -351,20 +365,12 @@ class Book
                 $releaseStmt->execute($partnerIds);
             }
 
-            // Mark open swaps as cancelled; historical swaps remain intact via ON DELETE SET NULL
-            $cancelSwaps = $pdo->prepare(
-                "UPDATE swaps
-                 SET status = 'cancelled'
-                 WHERE status IN ('pending', 'accepted')
-                   AND (requested_book_id = :b1 OR offered_book_id = :b2)"
-            );
-            $cancelSwaps->execute([':b1' => $bookId, ':b2' => $bookId]);
-
+            // ON DELETE CASCADE on swap_requests cleans up swap rows referencing this book
             $del = $pdo->prepare('DELETE FROM books WHERE id = ?');
             $del->execute([$bookId]);
 
             $pdo->commit();
-            self::removeCoverFile($book['cover_image']);
+            self::removeImageFile($book['image']);
 
             return ['ok' => true, 'message' => 'Book removed by admin.'];
         } catch (Throwable $e) {
@@ -382,10 +388,12 @@ class Book
     {
         $pdo = Database::getConnection();
 
-        $sql = 'SELECT b.id, b.title, b.author, b.category, b.book_condition, b.status,
-                       b.created_at, u.name AS owner_name, u.email AS owner_email
+        $sql = "SELECT b.id, b.title, b.author, b.book_condition, b.status, b.created_at,
+                       COALESCE(c.name, 'Uncategorized') AS category_name,
+                       u.name AS owner_name, u.email AS owner_email
                 FROM books b
-                INNER JOIN users u ON b.user_id = u.id';
+                INNER JOIN users u ON b.owner_id = u.id
+                LEFT JOIN categories c ON b.category_id = c.id";
         $params = [];
 
         $trimmed = trim($query);
@@ -413,8 +421,7 @@ class Book
             "SELECT
                 COUNT(*) AS total_books,
                 SUM(CASE WHEN status = 'available' THEN 1 ELSE 0 END) AS available_books,
-                SUM(CASE WHEN status = 'reserved' THEN 1 ELSE 0 END) AS reserved_books,
-                SUM(CASE WHEN status = 'swapped' THEN 1 ELSE 0 END) AS swapped_books
+                SUM(CASE WHEN status = 'reserved' THEN 1 ELSE 0 END) AS reserved_books
              FROM books"
         );
         $row = $stmt->fetch();
@@ -423,31 +430,30 @@ class Book
             'total_books'     => (int) ($row['total_books'] ?? 0),
             'available_books' => (int) ($row['available_books'] ?? 0),
             'reserved_books'  => (int) ($row['reserved_books'] ?? 0),
-            'swapped_books'   => (int) ($row['swapped_books'] ?? 0),
         ];
     }
 
     /**
      * Count total and available books listed by one user.
      */
-    public static function getStatsForUser(int $userId): array
+    public static function getStatsForOwner(int $ownerId): array
     {
         $pdo = Database::getConnection();
         $stmt = $pdo->prepare(
             "SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN status = 'available' THEN 1 ELSE 0 END) AS available,
-                SUM(CASE WHEN status = 'swapped' THEN 1 ELSE 0 END) AS swapped
+                SUM(CASE WHEN status = 'reserved' THEN 1 ELSE 0 END) AS reserved
              FROM books
-             WHERE user_id = ?"
+             WHERE owner_id = ?"
         );
-        $stmt->execute([$userId]);
+        $stmt->execute([$ownerId]);
         $row = $stmt->fetch();
 
         return [
             'total'     => (int) ($row['total'] ?? 0),
             'available' => (int) ($row['available'] ?? 0),
-            'swapped'   => (int) ($row['swapped'] ?? 0),
+            'reserved'  => (int) ($row['reserved'] ?? 0),
         ];
     }
 }

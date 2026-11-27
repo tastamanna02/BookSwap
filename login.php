@@ -2,8 +2,8 @@
 /**
  * Login Page
  *
- * Verifies CSRF token and authenticates users using password_verify().
- * Regenerates the session ID via Auth::login() to prevent session fixation.
+ * Verifies CSRF token and authenticates users using password_verify(),
+ * including temporary account lockout after repeated failed attempts.
  */
 
 declare(strict_types=1);
@@ -29,11 +29,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         if (!filter_var($email, FILTER_VALIDATE_EMAIL) || $password === '') {
             $error = 'Please enter a valid email and password.';
         } else {
-            $user = User::verifyCredentials($email, $password);
-            if ($user === null) {
-                // Keep login error generic so attackers cannot enumerate valid emails
-                $error = 'Invalid email or password.';
+            $result = User::verifyCredentials($email, $password);
+            if (!$result['ok'] || $result['user'] === null) {
+                $error = $result['message'] !== '' ? $result['message'] : 'Invalid email or password.';
             } else {
+                $user = $result['user'];
                 Auth::login($user);
                 setFlash('success', 'Welcome back, ' . $user['name'] . '!');
                 redirect($user['role'] === 'admin' ? 'admin.php' : 'index.php');

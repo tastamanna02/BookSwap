@@ -2,8 +2,8 @@
 /**
  * Add / Edit Book Form Page
  *
- * Enforces login, ownership (when editing), CSRF validation, and secure
- * image uploads verified via finfo MIME detection and getimagesize().
+ * Enforces login, ownership (when editing), CSRF validation, category lookup
+ * checks, and secure image uploads verified via finfo and getimagesize().
  */
 
 declare(strict_types=1);
@@ -36,26 +36,27 @@ if ($isEdit) {
     }
 
     // Server-side ownership check (never rely on hidden UI buttons)
-    if ((int) $existingBook['user_id'] !== $userId) {
+    if ((int) $existingBook['owner_id'] !== $userId) {
         http_response_code(403);
         setFlash('danger', 'You do not have permission to edit that book.');
         redirect('my-books.php');
     }
 
     if ($existingBook['status'] !== 'available') {
-        setFlash('warning', 'Books in an active or completed swap cannot be edited.');
+        setFlash('warning', 'Reserved or swapped books cannot be edited.');
         redirect('my-books.php');
     }
 }
 
+$categories = Book::getCategories();
+
 $form = [
     'title'          => $existingBook['title'] ?? '',
     'author'         => $existingBook['author'] ?? '',
-    'isbn'           => $existingBook['isbn'] ?? '',
-    'category'       => $existingBook['category'] ?? '',
-    'book_condition' => $existingBook['book_condition'] ?? 'Good',
+    'category_id'    => isset($existingBook['category_id']) ? (int) $existingBook['category_id'] : 0,
+    'book_condition' => $existingBook['book_condition'] ?? 'good',
     'description'    => $existingBook['description'] ?? '',
-    'cover_image'    => $existingBook['cover_image'] ?? null,
+    'image'          => $existingBook['image'] ?? null,
 ];
 
 $errors = [];
@@ -66,11 +67,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     } else {
         $form['title'] = trim((string) ($_POST['title'] ?? ''));
         $form['author'] = trim((string) ($_POST['author'] ?? ''));
-        $form['isbn'] = trim((string) ($_POST['isbn'] ?? ''));
-        $form['category'] = trim((string) ($_POST['category'] ?? ''));
+        $form['category_id'] = isset($_POST['category_id']) ? (int) $_POST['category_id'] : 0;
         $form['book_condition'] = trim((string) ($_POST['book_condition'] ?? ''));
         $form['description'] = trim((string) ($_POST['description'] ?? ''));
-        $removeCover = isset($_POST['remove_cover']) && $_POST['remove_cover'] === '1';
+        $removeImage = isset($_POST['remove_image']) && $_POST['remove_image'] === '1';
 
         if (mb_strlen($form['title']) < 2 || mb_strlen($form['title']) > 200) {
             $errors[] = 'Book title must be between 2 and 200 characters.';
@@ -78,10 +78,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         if (mb_strlen($form['author']) < 2 || mb_strlen($form['author']) > 150) {
             $errors[] = 'Author name must be between 2 and 150 characters.';
         }
-        if (mb_strlen($form['isbn']) > 30) {
-            $errors[] = 'ISBN must be 30 characters or fewer.';
-        }
-        if (!in_array($form['category'], bookCategories(), true)) {
+        if ($form['category_id'] <= 0 || !Book::categoryExists($form['category_id'])) {
             $errors[] = 'Please choose a valid book category.';
         }
         if (!in_array($form['book_condition'], bookConditions(), true)) {
@@ -91,14 +88,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $errors[] = 'Description must be 2000 characters or fewer.';
         }
 
-        // Handle optional cover image upload
+        // Handle optional book image upload
         $uploadedFilename = null;
-        if (isset($_FILES['cover_image']) && $_FILES['cover_image']['error'] !== UPLOAD_ERR_NO_FILE) {
-            $file = $_FILES['cover_image'];
+        if (isset($_FILES['image']) && $_FILES['image']['error'] !== UPLOAD_ERR_NO_FILE) {
+            $file = $_FILES['image'];
             if ($file['error'] !== UPLOAD_ERR_OK) {
-                $errors[] = 'Could not upload the cover image. Please try again.';
+                $errors[] = 'Could not upload the book image. Please try again.';
             } elseif ((int) $file['size'] > 2 * 1024 * 1024) {
-                $errors[] = 'Cover image must be 2 MB or smaller.';
+                $errors[] = 'Book image must be 2 MB or smaller.';
             } else {
                 $finfo = new finfo(FILEINFO_MIME_TYPE);
                 $mime = $finfo->file($file['tmp_name']);
@@ -109,7 +106,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 ];
 
                 if (!is_string($mime) || !isset($mimeMap[$mime]) || @getimagesize($file['tmp_name']) === false) {
-                    $errors[] = 'Cover image must be a valid JPG, PNG, or WebP image.';
+                    $errors[] = 'Book image must be a valid JPG, PNG, or WebP image.';
                 } else {
                     if (!is_dir(UPLOAD_DIR)) {
                         mkdir(UPLOAD_DIR, 0755, true);
@@ -125,21 +122,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
 
         if (empty($errors)) {
-            $coverToSave = $form['cover_image'];
+            $imageToSave = $form['image'];
             if ($uploadedFilename !== null) {
-                $coverToSave = $uploadedFilename;
-            } elseif ($removeCover) {
-                $coverToSave = null;
+                $imageToSave = $uploadedFilename;
+            } elseif ($removeImage) {
+                $imageToSave = null;
             }
 
             $payload = [
+                'category_id'    => $form['category_id'],
                 'title'          => $form['title'],
                 'author'         => $form['author'],
-                'isbn'           => $form['isbn'],
-                'category'       => $form['category'],
                 'book_condition' => $form['book_condition'],
                 'description'    => $form['description'],
-                'cover_image'    => $coverToSave,
+                'image'          => $imageToSave,
             ];
 
             if ($isEdit) {
@@ -148,7 +144,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                     setFlash('success', $result['message']);
                     redirect('my-books.php');
                 }
-                Book::removeCoverFile($uploadedFilename);
+                Book::removeImageFile($uploadedFilename);
                 $errors[] = $result['message'];
             } else {
                 Book::create($userId, $payload);
@@ -157,7 +153,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             }
         } else {
             // Clean up newly uploaded file if form validation failed
-            Book::removeCoverFile($uploadedFilename);
+            Book::removeImageFile($uploadedFilename);
         }
     }
 }
@@ -195,7 +191,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                 <?php endif; ?>
 
                 <div class="row g-3">
-                    <div class="col-md-8">
+                    <div class="col-md-6">
                         <label for="title" class="form-label">Book Title</label>
                         <input type="text"
                                id="title"
@@ -206,17 +202,6 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                                maxlength="200"
                                value="<?= e($form['title']) ?>">
                         <div class="invalid-feedback">Please enter the book title (2-200 characters).</div>
-                    </div>
-
-                    <div class="col-md-4">
-                        <label for="isbn" class="form-label">ISBN <span class="text-muted small">(optional)</span></label>
-                        <input type="text"
-                               id="isbn"
-                               name="isbn"
-                               class="form-control"
-                               maxlength="30"
-                               placeholder="e.g. 978-0132350884"
-                               value="<?= e($form['isbn']) ?>">
                     </div>
 
                     <div class="col-md-6">
@@ -232,25 +217,26 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                         <div class="invalid-feedback">Please enter the author name.</div>
                     </div>
 
-                    <div class="col-md-3">
-                        <label for="category" class="form-label">Category</label>
-                        <select id="category" name="category" class="form-select" required>
+                    <div class="col-md-6">
+                        <label for="category_id" class="form-label">Category</label>
+                        <select id="category_id" name="category_id" class="form-select" required>
                             <option value="">Choose...</option>
-                            <?php foreach (bookCategories() as $cat): ?>
-                                <option value="<?= e($cat) ?>" <?= $form['category'] === $cat ? 'selected' : '' ?>>
-                                    <?= e($cat) ?>
+                            <?php foreach ($categories as $cat): ?>
+                                <option value="<?= e((string) $cat['id']) ?>"
+                                    <?= $form['category_id'] === (int) $cat['id'] ? 'selected' : '' ?>>
+                                    <?= e($cat['name']) ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
                         <div class="invalid-feedback">Please select a category.</div>
                     </div>
 
-                    <div class="col-md-3">
+                    <div class="col-md-6">
                         <label for="book_condition" class="form-label">Condition</label>
                         <select id="book_condition" name="book_condition" class="form-select" required>
                             <?php foreach (bookConditions() as $cond): ?>
                                 <option value="<?= e($cond) ?>" <?= $form['book_condition'] === $cond ? 'selected' : '' ?>>
-                                    <?= e($cond) ?>
+                                    <?= e(ucfirst($cond)) ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
@@ -263,27 +249,27 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                                   rows="3"
                                   maxlength="2000"
                                   class="form-control"
-                                  placeholder="Edition details, highlighting notes, or preferred campus meetup location..."><?= e($form['description'] ?? '') ?></textarea>
+                                  placeholder="Edition details, highlighting notes, or preferred campus meetup spot..."><?= e($form['description'] ?? '') ?></textarea>
                     </div>
 
                     <div class="col-12">
-                        <label for="cover_image" class="form-label">Cover Image <span class="text-muted small">(JPG, PNG, WebP, max 2 MB)</span></label>
+                        <label for="image" class="form-label">Cover Image <span class="text-muted small">(JPG, PNG, WebP, max 2 MB)</span></label>
                         <input type="file"
-                               id="cover_image"
-                               name="cover_image"
+                               id="image"
+                               name="image"
                                class="form-control"
                                accept="image/jpeg,image/png,image/webp">
                         <div class="invalid-feedback">Please upload a JPG, PNG, or WebP image under 2 MB.</div>
 
-                        <?php if ($isEdit && !empty($form['cover_image'])): ?>
+                        <?php if ($isEdit && !empty($form['image'])): ?>
                             <div class="mt-2 d-flex align-items-center gap-3">
-                                <img src="<?= e(url('uploads/' . rawurlencode((string) $form['cover_image']))) ?>"
-                                     alt="Current cover"
+                                <img src="<?= e(url('uploads/' . rawurlencode((string) $form['image']))) ?>"
+                                     alt="Current book cover"
                                      class="rounded border"
                                      style="height: 70px; width: 55px; object-fit: cover;">
                                 <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" value="1" id="remove_cover" name="remove_cover">
-                                    <label class="form-check-label small" for="remove_cover">Remove current cover image</label>
+                                    <input class="form-check-input" type="checkbox" value="1" id="remove_image" name="remove_image">
+                                    <label class="form-check-label small" for="remove_image">Remove current cover image</label>
                                 </div>
                             </div>
                         <?php endif; ?>

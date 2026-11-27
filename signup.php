@@ -18,9 +18,8 @@ Auth::requireGuest();
 
 $errors = [];
 $old = [
-    'name'       => '',
-    'email'      => '',
-    'university' => '',
+    'name'  => '',
+    'email' => '',
 ];
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
@@ -29,7 +28,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     } else {
         $old['name'] = trim((string) ($_POST['name'] ?? ''));
         $old['email'] = trim((string) ($_POST['email'] ?? ''));
-        $old['university'] = trim((string) ($_POST['university'] ?? ''));
         $password = (string) ($_POST['password'] ?? '');
         $confirmPassword = (string) ($_POST['confirm_password'] ?? '');
 
@@ -43,10 +41,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $errors[] = 'An account with that email already exists.';
         }
 
-        if (mb_strlen($old['university']) > 150) {
-            $errors[] = 'University or department name must be 150 characters or fewer.';
-        }
-
         if (strlen($password) < 8) {
             $errors[] = 'Password must be at least 8 characters long.';
         } elseif ($password !== $confirmPassword) {
@@ -54,7 +48,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
 
         if (empty($errors)) {
-            User::create($old['name'], $old['email'], $password, $old['university']);
+            User::create($old['name'], $old['email'], $password);
             setFlash('success', 'Account created successfully! Please log in with your email and password.');
             redirect('login.php');
         }
@@ -107,17 +101,6 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                            maxlength="150"
                            value="<?= e($old['email']) ?>">
                     <div class="invalid-feedback">Please enter a valid email address.</div>
-                </div>
-
-                <div class="mb-3">
-                    <label for="university" class="form-label">University / Department <span class="text-muted small">(optional)</span></label>
-                    <input type="text"
-                           id="university"
-                           name="university"
-                           class="form-control"
-                           maxlength="150"
-                           placeholder="e.g. State University - CS Dept"
-                           value="<?= e($old['university']) ?>">
                 </div>
 
                 <div class="mb-3">

@@ -21,17 +21,12 @@ Csrf::requireValidApiPost();
 $body = getJsonBody();
 $requestedBookId = isset($body['requested_book_id']) ? (int) $body['requested_book_id'] : 0;
 $offeredBookId = isset($body['offered_book_id']) ? (int) $body['offered_book_id'] : 0;
-$message = isset($body['message']) && is_string($body['message']) ? trim($body['message']) : '';
 
 if ($requestedBookId <= 0 || $offeredBookId <= 0) {
     jsonResponse(['ok' => false, 'message' => 'Please choose a valid book to offer.'], 400);
 }
 
-if (mb_strlen($message) > 500) {
-    jsonResponse(['ok' => false, 'message' => 'Message must be 500 characters or fewer.'], 400);
-}
-
-$result = Swap::createRequest((int) Auth::id(), $requestedBookId, $offeredBookId, $message);
+$result = Swap::createRequest((int) Auth::id(), $requestedBookId, $offeredBookId);
 $statusCode = $result['ok'] ? 201 : 400;
 
 jsonResponse($result, $statusCode);

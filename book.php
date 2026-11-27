@@ -2,8 +2,8 @@
 /**
  * Single Book Details & Swap Request Page
  *
- * Displays full book and owner details. Logged-in students who do not own
- * the book can select one of their own available books and send a swap offer.
+ * Displays full book details. Logged-in students who do not own the book
+ * can select one of their own available books and send a swap offer via Fetch.
  */
 
 declare(strict_types=1);
@@ -26,9 +26,9 @@ if ($book === null) {
 }
 
 $currentUserId = Auth::id();
-$isOwner = ($currentUserId !== null && (int) $book['user_id'] === $currentUserId);
+$isOwner = ($currentUserId !== null && (int) $book['owner_id'] === $currentUserId);
 $myAvailableBooks = ($currentUserId !== null && !$isOwner && $book['status'] === 'available')
-    ? Book::findAvailableByUser($currentUserId)
+    ? Book::findAvailableByOwner($currentUserId)
     : [];
 
 $pageTitle = $book['title'];
@@ -46,8 +46,8 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
 <div class="row g-4">
     <div class="col-md-4">
         <div class="card border-0 shadow-sm p-3">
-            <?php if (!empty($book['cover_image'])): ?>
-                <img src="<?= e(url('uploads/' . rawurlencode((string) $book['cover_image']))) ?>"
+            <?php if (!empty($book['image'])): ?>
+                <img src="<?= e(url('uploads/' . rawurlencode((string) $book['image']))) ?>"
                      class="book-detail-cover"
                      alt="<?= e($book['title']) ?>">
             <?php else: ?>
@@ -61,8 +61,8 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
     <div class="col-md-8">
         <div class="card border-0 shadow-sm p-4 mb-4">
             <div class="d-flex flex-wrap gap-2 mb-2">
-                <span class="badge bg-light text-dark border"><?= e($book['category']) ?></span>
-                <span class="badge bg-info text-dark"><?= e($book['book_condition']) ?></span>
+                <span class="badge bg-light text-dark border"><?= e($book['category_name']) ?></span>
+                <span class="badge bg-info text-dark"><?= e(ucfirst($book['book_condition'])) ?></span>
                 <span class="badge text-uppercase <?= e(statusBadgeClass($book['status'])) ?>">
                     <?= e($book['status']) ?>
                 </span>
@@ -71,10 +71,6 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
             <h1 class="h3 fw-bold text-primary mb-1"><?= e($book['title']) ?></h1>
             <p class="text-muted mb-3">by <?= e($book['author']) ?></p>
 
-            <?php if (!empty($book['isbn'])): ?>
-                <p class="small mb-2"><strong>ISBN:</strong> <?= e($book['isbn']) ?></p>
-            <?php endif; ?>
-
             <p class="mb-3">
                 <?= !empty($book['description'])
                     ? nl2br(e($book['description']))
@@ -82,15 +78,9 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
             </p>
 
             <hr>
-            <div class="small">
-                <p class="mb-1">
-                    <strong>Listed by:</strong> <?= e($book['owner_name']) ?>
-                    <?= !empty($book['owner_university']) ? ' &mdash; ' . e($book['owner_university']) : '' ?>
-                </p>
-                <?php if (!empty($book['owner_bio'])): ?>
-                    <p class="text-muted mb-0"><?= e($book['owner_bio']) ?></p>
-                <?php endif; ?>
-            </div>
+            <p class="small mb-0">
+                <strong>Listed by:</strong> <?= e($book['owner_name']) ?>
+            </p>
         </div>
 
         <div class="card border-0 shadow-sm p-4">
@@ -130,22 +120,10 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                             <option value="">-- Choose your book --</option>
                             <?php foreach ($myAvailableBooks as $myBook): ?>
                                 <option value="<?= e((string) $myBook['id']) ?>">
-                                    <?= e($myBook['title'] . ' by ' . $myBook['author'] . ' (' . $myBook['book_condition'] . ')') ?>
+                                    <?= e($myBook['title'] . ' by ' . $myBook['author'] . ' (' . ucfirst($myBook['book_condition']) . ')') ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="swap_message" class="form-label">
-                            Short Message <span class="text-muted small">(optional, max 500 chars)</span>
-                        </label>
-                        <textarea id="swap_message"
-                                  name="message"
-                                  rows="2"
-                                  maxlength="500"
-                                  class="form-control"
-                                  placeholder="e.g. Can we meet near the main library after 2 PM?"></textarea>
                     </div>
 
                     <button type="submit" id="swap-submit-btn" class="btn btn-primary">Send Swap Request</button>

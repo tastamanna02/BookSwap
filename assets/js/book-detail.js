@@ -13,7 +13,6 @@
     }
 
     const offeredSelect = document.getElementById('offered_book_id');
-    const messageInput = document.getElementById('swap_message');
     const submitBtn = document.getElementById('swap-submit-btn');
     const alertBox = document.getElementById('swap-form-alert');
 
@@ -23,15 +22,9 @@
 
         const requestedBookId = Number(swapForm.getAttribute('data-requested-book-id') || '0');
         const offeredBookId = Number(offeredSelect ? offeredSelect.value : '0');
-        const message = messageInput ? messageInput.value.trim() : '';
 
         if (offeredBookId <= 0) {
             BookSwap.showAlert(alertBox, 'Please choose one of your available books to offer.', 'warning');
-            return;
-        }
-
-        if (message.length > 500) {
-            BookSwap.showAlert(alertBox, 'Your note must be 500 characters or fewer.', 'warning');
             return;
         }
 
@@ -45,7 +38,6 @@
             body: {
                 requested_book_id: requestedBookId,
                 offered_book_id: offeredBookId,
-                message: message,
             },
         });
 

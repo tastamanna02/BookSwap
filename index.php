@@ -14,10 +14,11 @@ use App\Core\Auth;
 use App\Models\Book;
 
 $query = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
-$category = isset($_GET['category']) && is_string($_GET['category']) ? trim($_GET['category']) : '';
+$categoryId = isset($_GET['category_id']) ? (int) $_GET['category_id'] : 0;
 $condition = isset($_GET['condition']) && is_string($_GET['condition']) ? trim($_GET['condition']) : '';
 
-$books = Book::searchAvailable($query, $category, $condition);
+$categories = Book::getCategories();
+$books = Book::searchAvailable($query, $categoryId, $condition);
 $currentUserId = Auth::id() ?? 0;
 
 $pageTitle = 'Browse Books';
@@ -49,22 +50,22 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
 <form id="search-form" method="GET" action="<?= e(url('index.php')) ?>" class="card border-0 shadow-sm p-3 mb-4">
     <div class="row g-2 align-items-end">
         <div class="col-md-5">
-            <label for="search-query" class="form-label small fw-semibold mb-1">Search Title, Author, or ISBN</label>
+            <label for="search-query" class="form-label small fw-semibold mb-1">Search Title or Author</label>
             <input type="text"
                    id="search-query"
                    name="q"
                    maxlength="100"
                    class="form-control"
-                   placeholder="e.g. Clean Code, Mankiw, 978..."
+                   placeholder="e.g. Clean Code, Mankiw..."
                    value="<?= e($query) ?>">
         </div>
         <div class="col-md-3">
             <label for="search-category" class="form-label small fw-semibold mb-1">Category</label>
-            <select id="search-category" name="category" class="form-select">
+            <select id="search-category" name="category_id" class="form-select">
                 <option value="">All Categories</option>
-                <?php foreach (bookCategories() as $cat): ?>
-                    <option value="<?= e($cat) ?>" <?= $category === $cat ? 'selected' : '' ?>>
-                        <?= e($cat) ?>
+                <?php foreach ($categories as $cat): ?>
+                    <option value="<?= e((string) $cat['id']) ?>" <?= $categoryId === (int) $cat['id'] ? 'selected' : '' ?>>
+                        <?= e($cat['name']) ?>
                     </option>
                 <?php endforeach; ?>
             </select>
@@ -75,7 +76,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                 <option value="">Any Condition</option>
                 <?php foreach (bookConditions() as $cond): ?>
                     <option value="<?= e($cond) ?>" <?= $condition === $cond ? 'selected' : '' ?>>
-                        <?= e($cond) ?>
+                        <?= e(ucfirst($cond)) ?>
                     </option>
                 <?php endforeach; ?>
             </select>
@@ -107,8 +108,8 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
             <div class="col-sm-6 col-lg-4 col-xl-3">
                 <div class="card h-100 shadow-sm book-card">
                     <div class="book-cover-box">
-                        <?php if (!empty($book['cover_image'])): ?>
-                            <img src="<?= e(url('uploads/' . rawurlencode((string) $book['cover_image']))) ?>"
+                        <?php if (!empty($book['image'])): ?>
+                            <img src="<?= e(url('uploads/' . rawurlencode((string) $book['image']))) ?>"
                                  class="book-cover-img"
                                  alt="<?= e($book['title']) ?>">
                         <?php else: ?>
@@ -117,9 +118,9 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                     </div>
                     <div class="card-body d-flex flex-column">
                         <div class="d-flex flex-wrap gap-1 mb-2">
-                            <span class="badge bg-light text-dark border"><?= e($book['category']) ?></span>
-                            <span class="badge bg-info text-dark"><?= e($book['book_condition']) ?></span>
-                            <?php if ($currentUserId > 0 && (int) $book['user_id'] === $currentUserId): ?>
+                            <span class="badge bg-light text-dark border"><?= e($book['category_name']) ?></span>
+                            <span class="badge bg-info text-dark"><?= e(ucfirst($book['book_condition'])) ?></span>
+                            <?php if ($currentUserId > 0 && (int) $book['owner_id'] === $currentUserId): ?>
                                 <span class="badge bg-secondary">Your Listing</span>
                             <?php endif; ?>
                         </div>
@@ -127,7 +128,6 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                         <p class="text-muted small mb-2">by <?= e($book['author']) ?></p>
                         <p class="small text-secondary mb-3 mt-auto">
                             Listed by <?= e($book['owner_name']) ?>
-                            <?= !empty($book['owner_university']) ? ' (' . e($book['owner_university']) . ')' : '' ?>
                         </p>
                         <a href="<?= e(url('book.php?id=' . (int) $book['id'])) ?>"
                            class="btn btn-outline-primary btn-sm w-100">

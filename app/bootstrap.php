@@ -97,7 +97,7 @@ set_exception_handler(static function (Throwable $e): void {
             header('Content-Type: application/json; charset=utf-8');
         }
         echo json_encode([
-            'ok' => false,
+            'ok'      => false,
             'message' => 'Something went wrong, try again.',
         ]);
         exit;
@@ -200,29 +200,11 @@ function getJsonBody(): array
 }
 
 /**
- * Allowed book categories used across forms, search filters, and validation.
- */
-function bookCategories(): array
-{
-    return [
-        'Computer Science',
-        'Engineering',
-        'Mathematics & Science',
-        'Economics & Business',
-        'Humanities & Social Sciences',
-        'Medicine & Health',
-        'Fiction & Literature',
-        'Exam Prep & Study Guides',
-        'Other',
-    ];
-}
-
-/**
- * Allowed physical book condition values matching the database ENUM.
+ * Allowed book condition values matching the books.book_condition ENUM.
  */
 function bookConditions(): array
 {
-    return ['New', 'Like New', 'Good', 'Fair'];
+    return ['new', 'good', 'fair', 'worn'];
 }
 
 /**

@@ -2,8 +2,8 @@
 /**
  * User Profile Page
  *
- * Allows authenticated users to view their swap stats, update profile
- * information, and change their password safely using CSRF and password_verify.
+ * Allows authenticated users to view their swap stats, update their name,
+ * and change their password safely using CSRF and password_verify().
  */
 
 declare(strict_types=1);
@@ -33,29 +33,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
     if ($formType === 'profile') {
         $name = trim((string) ($_POST['name'] ?? ''));
-        $university = trim((string) ($_POST['university'] ?? ''));
-        $bio = trim((string) ($_POST['bio'] ?? ''));
 
         if (mb_strlen($name) < 2 || mb_strlen($name) > 100) {
             $profileErrors[] = 'Name must be between 2 and 100 characters.';
         }
-        if (mb_strlen($university) > 150) {
-            $profileErrors[] = 'University / department must be 150 characters or fewer.';
-        }
-        if (mb_strlen($bio) > 500) {
-            $profileErrors[] = 'Bio must be 500 characters or fewer.';
-        }
 
         if (empty($profileErrors)) {
-            User::updateProfile($userId, $name, $university, $bio);
+            User::updateName($userId, $name);
             setFlash('success', 'Profile updated successfully.');
             redirect('profile.php');
         }
 
-        // Keep unsaved form input visible when validation fails
         $user['name'] = $name;
-        $user['university'] = $university;
-        $user['bio'] = $bio;
     } elseif ($formType === 'password') {
         $currentPassword = (string) ($_POST['current_password'] ?? '');
         $newPassword = (string) ($_POST['new_password'] ?? '');
@@ -81,7 +70,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
 }
 
-$bookStats = Book::getStatsForUser($userId);
+$bookStats = Book::getStatsForOwner($userId);
 $completedSwaps = Swap::countCompletedForUser($userId);
 
 $pageTitle = 'My Profile';
@@ -93,9 +82,6 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
         <div class="card border-0 shadow-sm p-4 mb-4">
             <h1 class="h4 fw-bold text-primary mb-1"><?= e($user['name']) ?></h1>
             <p class="text-muted small mb-2"><?= e($user['email']) ?></p>
-            <?php if (!empty($user['university'])): ?>
-                <p class="small mb-2"><strong>Campus:</strong> <?= e($user['university']) ?></p>
-            <?php endif; ?>
             <p class="small text-muted mb-0">
                 Role: <span class="badge bg-secondary text-uppercase"><?= e($user['role']) ?></span>
             </p>
@@ -126,7 +112,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
 
     <div class="col-lg-8">
         <div class="card border-0 shadow-sm p-4 mb-4">
-            <h2 class="h5 fw-bold mb-3">Edit Profile</h2>
+            <h2 class="h5 fw-bold mb-3">Edit Account Name</h2>
 
             <?php if (!empty($profileErrors)): ?>
                 <div class="alert alert-danger">
@@ -156,23 +142,8 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                 </div>
 
                 <div class="mb-3">
-                    <label for="university" class="form-label">University / Department</label>
-                    <input type="text"
-                           id="university"
-                           name="university"
-                           class="form-control"
-                           maxlength="150"
-                           value="<?= e($user['university']) ?>">
-                </div>
-
-                <div class="mb-3">
-                    <label for="bio" class="form-label">Short Bio / Preferred Genres</label>
-                    <textarea id="bio"
-                              name="bio"
-                              rows="3"
-                              maxlength="500"
-                              class="form-control"
-                              placeholder="Tell fellow students where on campus you prefer to meet or what books you enjoy..."><?= e($user['bio'] ?? '') ?></textarea>
+                    <label class="form-label">Email Address</label>
+                    <input type="email" class="form-control" value="<?= e($user['email']) ?>" disabled>
                 </div>
 
                 <button type="submit" class="btn btn-primary">Save Profile</button>

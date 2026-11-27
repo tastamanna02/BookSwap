@@ -22,17 +22,22 @@
     const currentUserId = Number(grid.getAttribute('data-current-user-id') || '0');
     let debounceTimer = null;
 
+    function formatCondition(cond) {
+        if (!cond) return '';
+        return cond.charAt(0).toUpperCase() + cond.slice(1);
+    }
+
     function buildBookCard(book) {
         const col = BookSwap.createEl('div', 'col-sm-6 col-lg-4 col-xl-3');
         const card = BookSwap.createEl('div', 'card h-100 shadow-sm book-card');
 
-        // Cover area
+        // Image area
         const coverBox = BookSwap.createEl('div', 'book-cover-box');
-        if (book.cover_image) {
+        if (book.image) {
             const img = document.createElement('img');
             img.className = 'book-cover-img';
-            img.src = BookSwap.apiUrl('uploads/' + encodeURIComponent(book.cover_image));
-            img.alt = String(book.title || 'Book cover');
+            img.src = BookSwap.apiUrl('uploads/' + encodeURIComponent(book.image));
+            img.alt = String(book.title || 'Book image');
             coverBox.appendChild(img);
         } else {
             coverBox.appendChild(BookSwap.createEl('div', 'book-cover-placeholder', book.title));
@@ -42,19 +47,16 @@
         // Card body
         const body = BookSwap.createEl('div', 'card-body d-flex flex-column');
         const badges = BookSwap.createEl('div', 'd-flex flex-wrap gap-1 mb-2');
-        badges.appendChild(BookSwap.createEl('span', 'badge bg-light text-dark border', book.category));
-        badges.appendChild(BookSwap.createEl('span', 'badge bg-info text-dark', book.book_condition));
-        if (currentUserId > 0 && Number(book.user_id) === currentUserId) {
+        badges.appendChild(BookSwap.createEl('span', 'badge bg-light text-dark border', book.category_name));
+        badges.appendChild(BookSwap.createEl('span', 'badge bg-info text-dark', formatCondition(book.book_condition)));
+        if (currentUserId > 0 && Number(book.owner_id) === currentUserId) {
             badges.appendChild(BookSwap.createEl('span', 'badge bg-secondary', 'Your Listing'));
         }
         body.appendChild(badges);
 
         const title = BookSwap.createEl('h2', 'h6 card-title mb-1', book.title);
         const author = BookSwap.createEl('p', 'text-muted small mb-2', 'by ' + book.author);
-        const ownerText = book.owner_university
-            ? 'Listed by ' + book.owner_name + ' (' + book.owner_university + ')'
-            : 'Listed by ' + book.owner_name;
-        const owner = BookSwap.createEl('p', 'small text-secondary mb-3 mt-auto', ownerText);
+        const owner = BookSwap.createEl('p', 'small text-secondary mb-3 mt-auto', 'Listed by ' + book.owner_name);
 
         const actionLink = BookSwap.createEl('a', 'btn btn-outline-primary btn-sm w-100', 'View Details');
         actionLink.href = BookSwap.apiUrl('book.php?id=' + Number(book.id));
@@ -98,7 +100,7 @@
             params.set('q', queryInput.value.trim());
         }
         if (categorySelect && categorySelect.value !== '') {
-            params.set('category', categorySelect.value);
+            params.set('category_id', categorySelect.value);
         }
         if (conditionSelect && conditionSelect.value !== '') {
             params.set('condition', conditionSelect.value);
