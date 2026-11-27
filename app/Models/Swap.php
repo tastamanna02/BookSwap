@@ -9,8 +9,92 @@
 
 declare(strict_types=1);
 
-class Swap
+final class Swap
 {
+    /**
+     * Create a new 'pending' swap request inside a transaction with FOR UPDATE row locks.
+     * Returns [bool ok, string message].
+     */
+    public static function create(int $userId, int $requestedBookId, int $offeredBookId): array
+    {
+        $pdo = Database::pdo();
+        $pdo->beginTransaction();
+
+        try {
+            if ($requestedBookId <= 0 || $offeredBookId <= 0) {
+                throw new RuntimeException('Please select valid books for the swap.');
+            }
+
+            if ($requestedBookId === $offeredBookId) {
+                throw new RuntimeException('You cannot swap a book with itself.');
+            }
+
+            // Lock both book rows in ascending ID order to prevent race conditions and deadlocks
+            $books = self::lockBooksOrdered($pdo, $requestedBookId, $offeredBookId);
+
+            if (!isset($books[$requestedBookId], $books[$offeredBookId])) {
+                throw new RuntimeException('One or both selected books could not be found.');
+            }
+
+            $requestedBook = $books[$requestedBookId];
+            $offeredBook = $books[$offeredBookId];
+
+            if ((int) $requestedBook['owner_id'] === $userId) {
+                throw new RuntimeException('You cannot request a swap for your own book.');
+            }
+
+            if ((int) $offeredBook['owner_id'] !== $userId) {
+                throw new RuntimeException('You can only offer a book that you own.');
+            }
+
+            if ($requestedBook['status'] !== 'available' || $offeredBook['status'] !== 'available') {
+                throw new RuntimeException('Both books must be available to start a swap.');
+            }
+
+            // Ensure no pending request already exists for the same two books
+            $dupStmt = $pdo->prepare(
+                "SELECT id FROM swap_requests
+                 WHERE requested_book_id = ? AND offered_book_id = ? AND status = 'pending'
+                 LIMIT 1"
+            );
+            $dupStmt->execute([$requestedBookId, $offeredBookId]);
+            if ($dupStmt->fetchColumn() !== false) {
+                throw new RuntimeException('A pending swap request for these two books already exists.');
+            }
+
+            $insert = $pdo->prepare(
+                "INSERT INTO swap_requests
+                 (requester_id, owner_id, requested_book_id, offered_book_id, status)
+                 VALUES (?, ?, ?, ?, 'pending')"
+            );
+            $insert->execute([
+                $userId,
+                (int) $requestedBook['owner_id'],
+                $requestedBookId,
+                $offeredBookId,
+            ]);
+
+            $pdo->commit();
+            return [true, 'Swap request sent! You can track it on the My Swaps page.'];
+        } catch (PDOException $e) {
+            // PDOException extends RuntimeException, so rethrow DB failures cleanly
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        } catch (RuntimeException $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            return [false, $e->getMessage()];
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
     /**
      * Lock two book rows in ascending ID order to prevent deadlocks.
      */
@@ -33,89 +117,6 @@ class Swap
             $byId[(int) $row['id']] = $row;
         }
         return $byId;
-    }
-
-    /**
-     * Create a new 'pending' swap request offering one of the requester's available books.
-     */
-    public static function createRequest(int $requesterId, int $requestedBookId, int $offeredBookId): array
-    {
-        if ($requestedBookId <= 0 || $offeredBookId <= 0) {
-            return ['ok' => false, 'message' => 'Please select valid books for the swap.'];
-        }
-
-        if ($requestedBookId === $offeredBookId) {
-            return ['ok' => false, 'message' => 'You cannot swap a book with itself.'];
-        }
-
-        $pdo = Database::pdo();
-        $pdo->beginTransaction();
-
-        try {
-            $books = self::lockBooksOrdered($pdo, $requestedBookId, $offeredBookId);
-
-            if (!isset($books[$requestedBookId], $books[$offeredBookId])) {
-                $pdo->rollBack();
-                return ['ok' => false, 'message' => 'One of the selected books is no longer available.'];
-            }
-
-            $requestedBook = $books[$requestedBookId];
-            $offeredBook = $books[$offeredBookId];
-
-            if ((int) $offeredBook['owner_id'] !== $requesterId) {
-                $pdo->rollBack();
-                return ['ok' => false, 'message' => 'You can only offer a book that you own.'];
-            }
-
-            if ((int) $requestedBook['owner_id'] === $requesterId) {
-                $pdo->rollBack();
-                return ['ok' => false, 'message' => 'You cannot request a swap for your own book.'];
-            }
-
-            if ($requestedBook['status'] !== 'available' || $offeredBook['status'] !== 'available') {
-                $pdo->rollBack();
-                return ['ok' => false, 'message' => 'Both books must be available to start a swap.'];
-            }
-
-            // Prevent duplicate pending or accepted requests for the exact same book pair
-            $dupStmt = $pdo->prepare(
-                "SELECT id FROM swap_requests
-                 WHERE requester_id = ? AND requested_book_id = ? AND offered_book_id = ?
-                   AND status IN ('pending', 'accepted')
-                 LIMIT 1"
-            );
-            $dupStmt->execute([$requesterId, $requestedBookId, $offeredBookId]);
-            if ($dupStmt->fetchColumn() !== false) {
-                $pdo->rollBack();
-                return ['ok' => false, 'message' => 'You already have an active request for this book pair.'];
-            }
-
-            $insert = $pdo->prepare(
-                "INSERT INTO swap_requests
-                 (requester_id, owner_id, requested_book_id, offered_book_id, status)
-                 VALUES (?, ?, ?, ?, 'pending')"
-            );
-            $insert->execute([
-                $requesterId,
-                (int) $requestedBook['owner_id'],
-                $requestedBookId,
-                $offeredBookId,
-            ]);
-
-            $swapId = (int) $pdo->lastInsertId();
-            $pdo->commit();
-
-            return [
-                'ok'      => true,
-                'swap_id' => $swapId,
-                'message' => 'Swap request sent! You can track it on the My Swaps page.',
-            ];
-        } catch (Throwable $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            throw $e;
-        }
     }
 
     /**

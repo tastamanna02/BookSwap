@@ -21,5 +21,5 @@ if ($requestedBookId <= 0 || $offeredBookId <= 0) {
     json_out(['ok' => false, 'message' => 'Please choose a valid book to offer.'], 400);
 }
 
-$result = Swap::createRequest((int) Auth::id(), $requestedBookId, $offeredBookId);
-json_out($result, $result['ok'] ? 201 : 400);
+[$ok, $message] = Swap::create((int) Auth::id(), $requestedBookId, $offeredBookId);
+json_out(['ok' => $ok, 'message' => $message], $ok ? 201 : 400);
