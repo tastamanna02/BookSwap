@@ -10,12 +10,6 @@ declare(strict_types=1);
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'bootstrap.php';
 
-use App\Core\Auth;
-use App\Core\Csrf;
-use App\Models\Book;
-use App\Models\Swap;
-use App\Models\User;
-
 Auth::requireLogin();
 
 $user = Auth::user();
@@ -26,8 +20,8 @@ $passwordErrors = [];
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $formType = (string) ($_POST['form_type'] ?? '');
 
-    if (!Csrf::verifyFormPost()) {
-        setFlash('danger', 'Security token expired. Please try again.');
+    if (!Csrf::check($_POST['csrf_token'] ?? null)) {
+        flash('danger', 'Security token expired. Please try again.');
         redirect('profile.php');
     }
 
@@ -40,7 +34,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
         if (empty($profileErrors)) {
             User::updateName($userId, $name);
-            setFlash('success', 'Profile updated successfully.');
+            flash('success', 'Profile updated successfully.');
             redirect('profile.php');
         }
 
@@ -60,12 +54,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
 
         if (empty($passwordErrors)) {
-            $result = User::updatePassword($userId, $currentPassword, $newPassword);
-            if ($result['ok']) {
-                setFlash('success', $result['message']);
+            if (!User::verifyPassword($userId, $currentPassword)) {
+                $passwordErrors[] = 'Your current password is incorrect.';
+            } else {
+                User::updatePassword($userId, $newPassword);
+                flash('success', 'Password updated successfully.');
                 redirect('profile.php');
             }
-            $passwordErrors[] = $result['message'];
         }
     }
 }
@@ -73,7 +68,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 $bookStats = Book::getStatsForOwner($userId);
 $completedSwaps = Swap::countCompletedForUser($userId);
 
-$pageTitle = 'My Profile';
+$title = 'My Profile';
 require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'header.php';
 ?>
 

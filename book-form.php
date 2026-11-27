@@ -10,10 +10,6 @@ declare(strict_types=1);
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'bootstrap.php';
 
-use App\Core\Auth;
-use App\Core\Csrf;
-use App\Models\Book;
-
 Auth::requireLogin();
 
 $userId = (int) Auth::id();
@@ -31,19 +27,18 @@ $existingBook = null;
 if ($isEdit) {
     $existingBook = Book::findByIdWithOwner((int) $bookId);
     if ($existingBook === null) {
-        require __DIR__ . DIRECTORY_SEPARATOR . '404.php';
-        exit;
+        show_404();
     }
 
     // Server-side ownership check (never rely on hidden UI buttons)
     if ((int) $existingBook['owner_id'] !== $userId) {
         http_response_code(403);
-        setFlash('danger', 'You do not have permission to edit that book.');
+        flash('danger', 'You do not have permission to edit that book.');
         redirect('my-books.php');
     }
 
     if ($existingBook['status'] !== 'available') {
-        setFlash('warning', 'Reserved or swapped books cannot be edited.');
+        flash('warning', 'Reserved or swapped books cannot be edited.');
         redirect('my-books.php');
     }
 }
@@ -62,7 +57,7 @@ $form = [
 $errors = [];
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
-    if (!Csrf::verifyFormPost()) {
+    if (!Csrf::check($_POST['csrf_token'] ?? null)) {
         $errors[] = 'Your security token expired. Please submit the form again.';
     } else {
         $form['title'] = trim((string) ($_POST['title'] ?? ''));
@@ -141,14 +136,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             if ($isEdit) {
                 $result = Book::updateByOwner((int) $bookId, $userId, $payload);
                 if ($result['ok']) {
-                    setFlash('success', $result['message']);
+                    flash('success', $result['message']);
                     redirect('my-books.php');
                 }
                 Book::removeImageFile($uploadedFilename);
                 $errors[] = $result['message'];
             } else {
                 Book::create($userId, $payload);
-                setFlash('success', 'Your book has been listed for swaps!');
+                flash('success', 'Your book has been listed for swaps!');
                 redirect('my-books.php');
             }
         } else {
@@ -158,7 +153,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
 }
 
-$pageTitle = $isEdit ? 'Edit Book' : 'Add New Book';
+$title = $isEdit ? 'Edit Book' : 'Add New Book';
 require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'header.php';
 ?>
 

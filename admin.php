@@ -10,22 +10,17 @@ declare(strict_types=1);
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'bootstrap.php';
 
-use App\Core\Auth;
-use App\Models\Book;
-use App\Models\Swap;
-use App\Models\User;
-
 Auth::requireAdmin();
 
 $search = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
-$totalUsers = User::countAll();
+$totalUsers = User::count();
 $bookStats = Book::getStatsForAdmin();
 $swapStats = Swap::getStatsForAdmin();
 $allBooks = Book::listAllForAdmin($search);
 $recentSwaps = Swap::listRecentForAdmin(15);
 
-$pageTitle = 'Admin Dashboard';
-$pageScripts = ['assets/js/admin.js'];
+$title = 'Admin Dashboard';
+$pageScript = 'assets/js/admin.js';
 require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'header.php';
 ?>
 

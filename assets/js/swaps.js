@@ -125,7 +125,7 @@
     async function refreshSwaps() {
         const data = await BookSwap.fetchJson('api/swaps.php');
         if (!data || !data.ok) {
-            BookSwap.showAlert('global-alert', (data && data.message) || 'Something went wrong, try again.', 'danger');
+            BookSwap.showAlert('alerts', (data && data.message) || 'Something went wrong, try again.', 'danger');
             return;
         }
 
@@ -136,6 +136,13 @@
         if (incomingBadge) incomingBadge.textContent = String(incoming.length);
         if (outgoingBadge) outgoingBadge.textContent = String(outgoing.length);
         if (historyBadge) historyBadge.textContent = String(history.length);
+
+        const navBadge = document.getElementById('nav-pending-badge');
+        if (navBadge) {
+            const pendingCount = Number(data.pending_incoming || 0);
+            navBadge.textContent = String(pendingCount);
+            navBadge.classList.toggle('d-none', pendingCount <= 0);
+        }
 
         renderSection(incomingList, incoming, 'incoming', 'No incoming swap requests right now.');
         renderSection(outgoingList, outgoing, 'outgoing', 'You have no outgoing swap requests.');
@@ -171,12 +178,12 @@
         });
 
         if (result && result.ok) {
-            BookSwap.showAlert('global-alert', result.message || 'Swap updated.', 'success');
+            BookSwap.showAlert('alerts', result.message || 'Swap updated.', 'success');
             await refreshSwaps();
         } else {
             btn.disabled = false;
             btn.textContent = originalText;
-            BookSwap.showAlert('global-alert', (result && result.message) || 'Something went wrong, try again.', 'danger');
+            BookSwap.showAlert('alerts', (result && result.message) || 'Something went wrong, try again.', 'danger');
         }
     });
 })();

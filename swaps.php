@@ -10,9 +10,6 @@ declare(strict_types=1);
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'bootstrap.php';
 
-use App\Core\Auth;
-use App\Models\Swap;
-
 Auth::requireLogin();
 
 $userId = (int) Auth::id();
@@ -95,8 +92,8 @@ $renderSwapCard = static function (array $swap, string $mode) use ($userId): str
     return (string) ob_get_clean();
 };
 
-$pageTitle = 'My Swaps';
-$pageScripts = ['assets/js/swaps.js'];
+$title = 'My Swaps';
+$pageScript = 'assets/js/swaps.js';
 require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'header.php';
 ?>
 

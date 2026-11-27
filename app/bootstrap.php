@@ -2,24 +2,24 @@
 /**
  * Application Bootstrap
  *
- * Loaded at the top of every page and API endpoint. Sets up error handling,
- * secure sessions, dynamic base URL paths, class autoloading, and helpers.
+ * Sets strict types, configures secure sessions, registers class autoloading
+ * for app/Core and app/Models, sets a safe global exception handler, and
+ * defines shared escaping, flash, redirect, 404, and JSON API helpers.
  */
 
 declare(strict_types=1);
 
-// Never print raw PHP errors or stack traces to users; log them on the server instead.
+// Log PHP errors on the server instead of exposing stack traces in the browser
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 
-// Core filesystem paths
 define('APP_ROOT', dirname(__DIR__));
 define('UPLOAD_DIR', APP_ROOT . DIRECTORY_SEPARATOR . 'uploads');
 
 /**
- * Compute BASE_URL dynamically so the app works both in XAMPP (e.g. /BookSwap)
- * and when served directly from a web root (e.g. php -S localhost:8000).
+ * Detect BASE_URL dynamically so links work in C:\xampp\htdocs\BookSwap
+ * as well as when served from the project root (php -S localhost:8000).
  */
 $detectBaseUrl = static function (): string {
     $docRoot = isset($_SERVER['DOCUMENT_ROOT']) ? realpath((string) $_SERVER['DOCUMENT_ROOT']) : false;
@@ -29,14 +29,12 @@ $detectBaseUrl = static function (): string {
         $normDoc = str_replace('\\', '/', rtrim($docRoot, '\\/'));
         $normApp = str_replace('\\', '/', rtrim($appRoot, '\\/'));
 
-        // Case-insensitive prefix check for Windows paths
         if (stripos($normApp, $normDoc) === 0) {
             $relative = substr($normApp, strlen($normDoc));
             return $relative === false ? '' : rtrim($relative, '/');
         }
     }
 
-    // Fallback when using an Apache Alias: inspect script path
     $scriptName = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
     $dir = str_replace('\\', '/', dirname($scriptName));
     if (substr($dir, -4) === '/api') {
@@ -48,59 +46,59 @@ $detectBaseUrl = static function (): string {
 
 define('BASE_URL', $detectBaseUrl());
 
-// Configure secure session cookie settings before starting the PHP session
+// Start session with HttpOnly and SameSite=Lax cookie protections
 if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.use_strict_mode', '1');
     $isHttps = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
 
     session_set_cookie_params([
-        'lifetime' => 0,          // Expires when browser closes
+        'lifetime' => 0,
         'path'     => BASE_URL !== '' ? BASE_URL . '/' : '/',
         'domain'   => '',
         'secure'   => $isHttps,
-        'httponly' => true,       // Blocks JavaScript from reading the session cookie
-        'samesite' => 'Lax',      // Extra defense against CSRF attacks
+        'httponly' => true,
+        'samesite' => 'Lax',
     ]);
 
     session_start();
 }
 
-// Simple PSR-4 style autoloader for App\Core\* and App\Models\*
+// Autoload classes from app/Core and app/Models automatically
 spl_autoload_register(static function (string $className): void {
-    $prefix = 'App\\';
-    if (strpos($className, $prefix) !== 0) {
-        return;
+    // Strip optional namespace prefix if passed, keeping only the class name
+    $shortName = ltrim($className, '\\');
+    if (strpos($shortName, '\\') !== false) {
+        $parts = explode('\\', $shortName);
+        $shortName = end($parts);
     }
 
-    $relativeClass = substr($className, strlen($prefix));
-    $file = APP_ROOT . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR
-        . str_replace('\\', DIRECTORY_SEPARATOR, $relativeClass) . '.php';
+    $directories = [
+        APP_ROOT . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'Core' . DIRECTORY_SEPARATOR,
+        APP_ROOT . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'Models' . DIRECTORY_SEPARATOR,
+    ];
 
-    if (is_file($file)) {
-        require_once $file;
+    foreach ($directories as $dir) {
+        $file = $dir . $shortName . '.php';
+        if (is_file($file)) {
+            require_once $file;
+            return;
+        }
     }
 });
 
-// Global exception handler: log real error, show friendly message without stack trace
+// Global exception handler: log real cause, display friendly message without stack trace
 set_exception_handler(static function (Throwable $e): void {
     error_log('[BookSwap Error] ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
 
-    $isApi = defined('BOOKSWAP_API')
-        || strpos(str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? '')), '/api/') !== false;
+    $scriptPath = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    $isApi = defined('BOOKSWAP_API') || strpos($scriptPath, '/api/') !== false;
+
+    if ($isApi) {
+        json_out(['ok' => false, 'message' => 'Something went wrong, try again'], 500);
+    }
 
     if (!headers_sent()) {
         http_response_code(500);
-    }
-
-    if ($isApi) {
-        if (!headers_sent()) {
-            header('Content-Type: application/json; charset=utf-8');
-        }
-        echo json_encode([
-            'ok'      => false,
-            'message' => 'Something went wrong, try again.',
-        ]);
-        exit;
     }
 
     echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">'
@@ -111,14 +109,14 @@ set_exception_handler(static function (Throwable $e): void {
         . '<div class="container"><div class="row justify-content-center"><div class="col-md-6">'
         . '<div class="card shadow-sm border-0 p-4 text-center">'
         . '<h1 class="h4 text-danger mb-3">Oops!</h1>'
-        . '<p class="text-muted mb-4">Something went wrong, try again.</p>'
+        . '<p class="text-muted mb-4">Something went wrong, try again</p>'
         . '<a href="' . e(url('index.php')) . '" class="btn btn-primary">Back to Home</a>'
         . '</div></div></div></div></body></html>';
     exit;
 });
 
 /**
- * Escape HTML output safely to prevent Cross-Site Scripting (XSS).
+ * Escape HTML output with htmlspecialchars to block Cross-Site Scripting (XSS).
  */
 function e(?string $value): string
 {
@@ -126,7 +124,7 @@ function e(?string $value): string
 }
 
 /**
- * Build an application URL using BASE_URL so links work in any folder setup.
+ * Build an application URL prefixed with BASE_URL.
  */
 function url(string $path = ''): string
 {
@@ -147,38 +145,37 @@ function redirect(string $path): void
 }
 
 /**
- * Store a one-time flash notification in the session (for Post-Redirect-Get).
+ * Set or read a one-time flash message stored in the session.
+ * - Pass ($type, $msg) to store a flash message before a redirect.
+ * - Call flash() with no arguments to read and clear the stored message.
  */
-function setFlash(string $type, string $message): void
+function flash(string $type = '', ?string $msg = null): ?array
 {
-    $allowedTypes = ['success', 'danger', 'warning', 'info'];
-    $_SESSION['flash'] = [
-        'type'    => in_array($type, $allowedTypes, true) ? $type : 'info',
-        'message' => $message,
-    ];
-}
+    if ($type !== '' && $msg !== null) {
+        $allowedTypes = ['success', 'danger', 'warning', 'info'];
+        $_SESSION['flash'] = [
+            'type' => in_array($type, $allowedTypes, true) ? $type : 'info',
+            'msg'  => $msg,
+        ];
+        return null;
+    }
 
-/**
- * Retrieve and clear the one-time flash notification from the session.
- */
-function getFlash(): ?array
-{
     if (!isset($_SESSION['flash']) || !is_array($_SESSION['flash'])) {
         return null;
     }
 
-    $flash = $_SESSION['flash'];
+    $stored = $_SESSION['flash'];
     unset($_SESSION['flash']);
-    return $flash;
+    return $stored;
 }
 
 /**
- * Send a JSON response with an HTTP status code and stop execution.
+ * Send a JSON response with an HTTP status code and stop script execution.
  */
-function jsonResponse(array $data, int $statusCode = 200): void
+function json_out(array $data, int $code = 200): void
 {
     if (!headers_sent()) {
-        http_response_code($statusCode);
+        http_response_code($code);
         header('Content-Type: application/json; charset=utf-8');
     }
     echo json_encode($data);
@@ -186,9 +183,55 @@ function jsonResponse(array $data, int $statusCode = 200): void
 }
 
 /**
- * Parse a JSON request body safely into an associative array.
+ * Render the 404 Not Found page with a 404 HTTP status code and exit.
  */
-function getJsonBody(): array
+function show_404(): void
+{
+    if (!headers_sent()) {
+        http_response_code(404);
+    }
+    require APP_ROOT . DIRECTORY_SEPARATOR . '404.php';
+    exit;
+}
+
+/**
+ * Enforce HTTP method, optional authentication, and X-CSRF-Token on POST APIs.
+ */
+function api_guard(string $method = 'POST', bool $needLogin = true): void
+{
+    $expectedMethod = strtoupper($method);
+    if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? '')) !== $expectedMethod) {
+        json_out(['ok' => false, 'message' => 'Method not allowed.'], 405);
+    }
+
+    if ($needLogin && !Auth::check()) {
+        json_out(['ok' => false, 'message' => 'Please log in to continue.'], 401);
+    }
+
+    if ($expectedMethod === 'POST') {
+        $headerToken = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
+        if (!is_string($headerToken) && function_exists('getallheaders')) {
+            foreach (getallheaders() as $name => $value) {
+                if (strcasecmp((string) $name, 'X-CSRF-Token') === 0 && is_string($value)) {
+                    $headerToken = $value;
+                    break;
+                }
+            }
+        }
+
+        if (!Csrf::check(is_string($headerToken) ? $headerToken : null)) {
+            json_out([
+                'ok'      => false,
+                'message' => 'Invalid security token. Please refresh the page and try again.',
+            ], 403);
+        }
+    }
+}
+
+/**
+ * Read and decode a JSON request body safely into an associative array.
+ */
+function api_input(): array
 {
     $raw = file_get_contents('php://input');
     if ($raw === false || trim($raw) === '') {

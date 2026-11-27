@@ -11,23 +11,19 @@ declare(strict_types=1);
 define('BOOKSWAP_API', true);
 require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'bootstrap.php';
 
-use App\Models\Book;
-
-if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
-    jsonResponse(['ok' => false, 'message' => 'Method not allowed.'], 405);
-}
+api_guard('GET', false);
 
 $query = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
 $categoryId = isset($_GET['category_id']) ? (int) $_GET['category_id'] : 0;
 $condition = isset($_GET['condition']) && is_string($_GET['condition']) ? trim($_GET['condition']) : '';
 
 if (mb_strlen($query) > 100) {
-    jsonResponse(['ok' => false, 'message' => 'Search text is too long.'], 400);
+    json_out(['ok' => false, 'message' => 'Search text is too long.'], 400);
 }
 
 $books = Book::searchAvailable($query, $categoryId, $condition);
 
-jsonResponse([
+json_out([
     'ok'    => true,
     'books' => $books,
 ]);

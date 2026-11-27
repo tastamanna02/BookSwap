@@ -7,7 +7,7 @@
 (function () {
     'use strict';
 
-    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    const csrfMeta = document.querySelector('meta[name="csrf"]');
     const baseMeta = document.querySelector('meta[name="base-url"]');
 
     const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') || '' : '';
@@ -69,7 +69,7 @@
     }
 
     /**
-     * Show a friendly Bootstrap alert in a target container without innerHTML.
+     * Show a friendly Bootstrap alert in #alerts or an inline alert element without innerHTML.
      */
     function showAlert(target, message, type) {
         const el = typeof target === 'string' ? document.getElementById(target) : target;
@@ -78,20 +78,41 @@
         }
 
         const safeType = ['success', 'danger', 'warning', 'info'].includes(type) ? type : 'danger';
+        const safeText = String(message || 'Something went wrong, try again.');
+
+        if (el.id === 'alerts') {
+            const box = createEl('div', `alert alert-${safeType} alert-dismissible fade show`);
+            box.setAttribute('role', 'alert');
+            box.appendChild(document.createTextNode(safeText));
+
+            const closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.className = 'btn-close';
+            closeBtn.setAttribute('data-bs-dismiss', 'alert');
+            closeBtn.setAttribute('aria-label', 'Close');
+            box.appendChild(closeBtn);
+
+            el.replaceChildren(box);
+            return;
+        }
+
         el.className = `alert alert-${safeType}`;
-        el.replaceChildren();
-        el.appendChild(document.createTextNode(String(message || 'Something went wrong, try again.')));
+        el.replaceChildren(document.createTextNode(safeText));
         el.classList.remove('d-none');
     }
 
     /**
-     * Hide an alert box cleanly.
+     * Clear or hide an alert container cleanly.
      */
     function hideAlert(target) {
         const el = typeof target === 'string' ? document.getElementById(target) : target;
-        if (el) {
+        if (!el) {
+            return;
+        }
+
+        el.replaceChildren();
+        if (el.id !== 'alerts') {
             el.classList.add('d-none');
-            el.replaceChildren();
         }
     }
 
@@ -116,36 +137,60 @@
     }
 
     /**
-     * Attach standard client-side validation to forms marked with .js-validate-form.
+     * Validate a form's inputs and populate empty .invalid-feedback elements safely.
+     */
+    function validateFormFields(form) {
+        const pass = form.querySelector('input[name="password"], input[name="new_password"]');
+        const confirm = form.querySelector('input[name="confirm_password"]');
+        if (pass && confirm) {
+            if (confirm.value !== '' && pass.value !== confirm.value) {
+                confirm.setCustomValidity('Passwords do not match.');
+            } else {
+                confirm.setCustomValidity('');
+            }
+        }
+
+        const fileInput = form.querySelector('input[type="file"][name="image"]');
+        if (fileInput) {
+            if (fileInput.files && fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+                if (!allowed.includes(file.type)) {
+                    fileInput.setCustomValidity('Please upload a JPG, PNG, or WebP image.');
+                } else if (file.size > 2 * 1024 * 1024) {
+                    fileInput.setCustomValidity('Image must be 2 MB or smaller.');
+                } else {
+                    fileInput.setCustomValidity('');
+                }
+            } else {
+                fileInput.setCustomValidity('');
+            }
+        }
+
+        const fields = form.querySelectorAll('input, select, textarea');
+        fields.forEach(function (field) {
+            const group = field.parentElement;
+            const feedback = group ? group.querySelector('.invalid-feedback') : null;
+            if (feedback) {
+                feedback.textContent = field.validity.valid ? '' : field.validationMessage;
+            }
+        });
+    }
+
+    /**
+     * Attach standard client-side validation to forms marked with .needs-check or .js-validate-form.
      */
     function initFormValidation() {
-        const forms = document.querySelectorAll('.js-validate-form');
+        const forms = document.querySelectorAll('.needs-check, .js-validate-form');
         forms.forEach(function (form) {
-            form.addEventListener('submit', function (event) {
-                // Check matching password fields if present (signup and password change)
-                const pass = form.querySelector('input[name="password"], input[name="new_password"]');
-                const confirm = form.querySelector('input[name="confirm_password"]');
-                if (pass && confirm) {
-                    if (pass.value !== confirm.value) {
-                        confirm.setCustomValidity('Passwords do not match.');
-                    } else {
-                        confirm.setCustomValidity('');
-                    }
+            form.addEventListener('input', function () {
+                if (form.classList.contains('was-validated')) {
+                    validateFormFields(form);
                 }
+            });
 
-                // Check book image size/type client-side before upload
-                const fileInput = form.querySelector('input[type="file"][name="image"]');
-                if (fileInput && fileInput.files && fileInput.files.length > 0) {
-                    const file = fileInput.files[0];
-                    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
-                    if (!allowed.includes(file.type)) {
-                        fileInput.setCustomValidity('Please upload a JPG, PNG, or WebP image.');
-                    } else if (file.size > 2 * 1024 * 1024) {
-                        fileInput.setCustomValidity('Image must be 2 MB or smaller.');
-                    } else {
-                        fileInput.setCustomValidity('');
-                    }
-                }
+            form.addEventListener('submit', function (event) {
+                validateFormFields(form);
 
                 if (!form.checkValidity()) {
                     event.preventDefault();

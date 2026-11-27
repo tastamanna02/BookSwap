@@ -2,15 +2,11 @@
 /**
  * User Model
  *
- * Handles student and admin accounts using PDO prepared statements,
- * password_hash()/password_verify(), and brute-force login lockout tracking.
+ * Handles user lookups, secure password_hash()/password_verify() storage,
+ * brute-force lockout tracking (5 failures -> 15 min lock), and admin stats.
  */
 
 declare(strict_types=1);
-
-namespace App\Models;
-
-use App\Core\Database;
 
 class User
 {
@@ -18,13 +14,13 @@ class User
     private const LOCKOUT_MINUTES = 15;
 
     /**
-     * Find a user by ID without returning sensitive password or lockout internals.
+     * Find a user by ID without returning their password hash.
      */
-    public static function findById(int $id): ?array
+    public static function find(int $id): ?array
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $stmt = $pdo->prepare(
-            'SELECT id, name, email, role, created_at
+            'SELECT id, name, email, role, failed_attempts, locked_until, created_at
              FROM users
              WHERE id = ?
              LIMIT 1'
@@ -36,11 +32,11 @@ class User
     }
 
     /**
-     * Find a user by email (includes password_hash and lockout columns).
+     * Find a user by email (includes password_hash and lockout columns for login).
      */
     public static function findByEmail(string $email): ?array
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $stmt = $pdo->prepare(
             'SELECT id, name, email, password_hash, role, failed_attempts, locked_until, created_at
              FROM users
@@ -54,24 +50,11 @@ class User
     }
 
     /**
-     * Check whether an email address is already registered.
-     */
-    public static function emailExists(string $email): bool
-    {
-        $pdo = Database::getConnection();
-        $stmt = $pdo->prepare('SELECT 1 FROM users WHERE email = ? LIMIT 1');
-        $stmt->execute([strtolower(trim($email))]);
-
-        return $stmt->fetchColumn() !== false;
-    }
-
-    /**
-     * Register a new student account with a securely hashed password.
-     * Role is always forced to 'user' on public signup.
+     * Register a new student account with password_hash() and 'user' role.
      */
     public static function create(string $name, string $email, string $password): int
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $hash = password_hash($password, PASSWORD_DEFAULT);
 
         $stmt = $pdo->prepare(
@@ -89,130 +72,117 @@ class User
     }
 
     /**
-     * Verify login credentials using password_verify() and enforce account lockout
-     * after repeated failed attempts.
+     * Update a user's display name.
      */
-    public static function verifyCredentials(string $email, string $password): array
+    public static function updateName(int $id, string $name): bool
     {
-        $user = self::findByEmail($email);
-        if ($user === null) {
-            return [
-                'ok'      => false,
-                'user'    => null,
-                'message' => 'Invalid email or password.',
-            ];
-        }
-
-        // Check if account is currently locked due to too many failed logins
-        if (!empty($user['locked_until']) && strtotime((string) $user['locked_until']) > time()) {
-            return [
-                'ok'      => false,
-                'user'    => null,
-                'message' => 'Too many failed login attempts. Please wait a few minutes and try again.',
-            ];
-        }
-
-        $pdo = Database::getConnection();
-
-        if (!password_verify($password, $user['password_hash'])) {
-            // Reset counter if an old lockout has already expired
-            $previousAttempts = (!empty($user['locked_until']) && strtotime((string) $user['locked_until']) <= time())
-                ? 0
-                : (int) $user['failed_attempts'];
-
-            $newAttempts = $previousAttempts + 1;
-
-            if ($newAttempts >= self::MAX_FAILED_ATTEMPTS) {
-                $lockStmt = $pdo->prepare(
-                    'UPDATE users
-                     SET failed_attempts = ?, locked_until = DATE_ADD(NOW(), INTERVAL ? MINUTE)
-                     WHERE id = ?'
-                );
-                $lockStmt->execute([$newAttempts, self::LOCKOUT_MINUTES, (int) $user['id']]);
-
-                return [
-                    'ok'      => false,
-                    'user'    => null,
-                    'message' => 'Too many failed login attempts. Your account is temporarily locked for 15 minutes.',
-                ];
-            }
-
-            $failStmt = $pdo->prepare(
-                'UPDATE users SET failed_attempts = ?, locked_until = NULL WHERE id = ?'
-            );
-            $failStmt->execute([$newAttempts, (int) $user['id']]);
-
-            return [
-                'ok'      => false,
-                'user'    => null,
-                'message' => 'Invalid email or password.',
-            ];
-        }
-
-        // Successful login: reset failed attempts and upgrade hash if PHP default changed
-        if (password_needs_rehash($user['password_hash'], PASSWORD_DEFAULT)) {
-            $newHash = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = $pdo->prepare(
-                'UPDATE users
-                 SET password_hash = ?, failed_attempts = 0, locked_until = NULL
-                 WHERE id = ?'
-            );
-            $stmt->execute([$newHash, (int) $user['id']]);
-        } else {
-            $stmt = $pdo->prepare(
-                'UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?'
-            );
-            $stmt->execute([(int) $user['id']]);
-        }
-
-        unset($user['password_hash'], $user['failed_attempts'], $user['locked_until']);
-
-        return [
-            'ok'      => true,
-            'user'    => $user,
-            'message' => '',
-        ];
-    }
-
-    /**
-     * Update the user's editable display name.
-     */
-    public static function updateName(int $userId, string $name): bool
-    {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $stmt = $pdo->prepare('UPDATE users SET name = ? WHERE id = ?');
 
-        return $stmt->execute([trim($name), $userId]);
+        return $stmt->execute([trim($name), $id]);
     }
 
     /**
-     * Change password after verifying the user's current password.
+     * Hash and save a new password for the given user ID.
      */
-    public static function updatePassword(int $userId, string $currentPassword, string $newPassword): array
+    public static function updatePassword(int $id, string $newPassword): bool
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
+        $hash = password_hash($newPassword, PASSWORD_DEFAULT);
+        $stmt = $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+
+        return $stmt->execute([$hash, $id]);
+    }
+
+    /**
+     * Verify a user's current password by ID (used when changing password in profile).
+     */
+    public static function verifyPassword(int $id, string $password): bool
+    {
+        $pdo = Database::pdo();
         $stmt = $pdo->prepare('SELECT password_hash FROM users WHERE id = ? LIMIT 1');
-        $stmt->execute([$userId]);
+        $stmt->execute([$id]);
         $row = $stmt->fetch();
 
-        if ($row === false || !password_verify($currentPassword, $row['password_hash'])) {
-            return ['ok' => false, 'message' => 'Your current password is incorrect.'];
-        }
-
-        $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
-        $update = $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?');
-        $update->execute([$newHash, $userId]);
-
-        return ['ok' => true, 'message' => 'Password updated successfully.'];
+        return $row !== false && password_verify($password, $row['password_hash']);
     }
 
     /**
-     * Count total registered users for the admin dashboard.
+     * Return true if the user's account is currently inside a lockout window.
      */
-    public static function countAll(): int
+    public static function isLocked(array $user): bool
     {
-        $pdo = Database::getConnection();
+        if (empty($user['locked_until'])) {
+            return false;
+        }
+
+        return strtotime((string) $user['locked_until']) > time();
+    }
+
+    /**
+     * Increment failed login attempts; on the 5th failure lock for 15 minutes
+     * and reset the attempt counter to 0.
+     */
+    public static function recordFailure(array $user): void
+    {
+        $pdo = Database::pdo();
+        $userId = (int) $user['id'];
+        $attempts = (int) ($user['failed_attempts'] ?? 0) + 1;
+
+        if ($attempts >= self::MAX_FAILED_ATTEMPTS) {
+            $stmt = $pdo->prepare(
+                'UPDATE users
+                 SET failed_attempts = 0, locked_until = DATE_ADD(NOW(), INTERVAL ? MINUTE)
+                 WHERE id = ?'
+            );
+            $stmt->execute([self::LOCKOUT_MINUTES, $userId]);
+            return;
+        }
+
+        $stmt = $pdo->prepare(
+            'UPDATE users SET failed_attempts = ?, locked_until = NULL WHERE id = ?'
+        );
+        $stmt->execute([$attempts, $userId]);
+    }
+
+    /**
+     * Clear any failed login attempts and lockout timestamp after a successful login.
+     */
+    public static function resetFailures(int $id): void
+    {
+        $pdo = Database::pdo();
+        $stmt = $pdo->prepare(
+            'UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?'
+        );
+        $stmt->execute([$id]);
+    }
+
+    /**
+     * List all registered users along with how many books each user owns.
+     */
+    public static function all(): array
+    {
+        $pdo = Database::pdo();
+        $stmt = $pdo->query(
+            'SELECT u.id, u.name, u.email, u.role, u.locked_until, u.created_at,
+                    COUNT(b.id) AS book_count
+             FROM users u
+             LEFT JOIN books b ON b.owner_id = u.id
+             GROUP BY u.id
+             ORDER BY u.created_at DESC, u.id DESC'
+        );
+
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * Count total registered users.
+     */
+    public static function count(): int
+    {
+        $pdo = Database::pdo();
         $stmt = $pdo->query('SELECT COUNT(*) FROM users');
+
         return (int) $stmt->fetchColumn();
     }
 }

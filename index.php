@@ -10,9 +10,6 @@ declare(strict_types=1);
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'bootstrap.php';
 
-use App\Core\Auth;
-use App\Models\Book;
-
 $query = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
 $categoryId = isset($_GET['category_id']) ? (int) $_GET['category_id'] : 0;
 $condition = isset($_GET['condition']) && is_string($_GET['condition']) ? trim($_GET['condition']) : '';
@@ -21,8 +18,8 @@ $categories = Book::getCategories();
 $books = Book::searchAvailable($query, $categoryId, $condition);
 $currentUserId = Auth::id() ?? 0;
 
-$pageTitle = 'Browse Books';
-$pageScripts = ['assets/js/browse.js'];
+$title = 'Browse Books';
+$pageScript = 'assets/js/browse.js';
 require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'header.php';
 ?>
 

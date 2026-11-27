@@ -11,20 +11,15 @@ declare(strict_types=1);
 define('BOOKSWAP_API', true);
 require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'bootstrap.php';
 
-use App\Core\Auth;
-use App\Models\Swap;
+api_guard('GET', true);
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
-    jsonResponse(['ok' => false, 'message' => 'Method not allowed.'], 405);
-}
+$userId = (int) Auth::id();
+$grouped = Swap::getUserSwapsGrouped($userId);
 
-Auth::requireApiLogin();
-
-$grouped = Swap::getUserSwapsGrouped((int) Auth::id());
-
-jsonResponse([
-    'ok'       => true,
-    'incoming' => $grouped['incoming'],
-    'outgoing' => $grouped['outgoing'],
-    'history'  => $grouped['history'],
+json_out([
+    'ok'               => true,
+    'pending_incoming' => Swap::pendingIncoming($userId),
+    'incoming'         => $grouped['incoming'],
+    'outgoing'         => $grouped['outgoing'],
+    'history'          => $grouped['history'],
 ]);

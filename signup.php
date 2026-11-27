@@ -2,17 +2,14 @@
 /**
  * Student Sign Up Page
  *
- * Validates registration input on both client and server, enforces CSRF
- * protection, hashes passwords with password_hash(), and assigns 'user' role.
+ * Validates registration input server-side and client-side (.needs-check),
+ * verifies CSRF, creates the user with password_hash(), logs them in,
+ * flashes a welcome message, and redirects to my-books.php.
  */
 
 declare(strict_types=1);
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'bootstrap.php';
-
-use App\Core\Auth;
-use App\Core\Csrf;
-use App\Models\User;
 
 Auth::requireGuest();
 
@@ -23,7 +20,7 @@ $old = [
 ];
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
-    if (!Csrf::verifyFormPost()) {
+    if (!Csrf::check($_POST['csrf_token'] ?? null)) {
         $errors[] = 'Your security token expired. Please try submitting the form again.';
     } else {
         $old['name'] = trim((string) ($_POST['name'] ?? ''));
@@ -31,13 +28,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $password = (string) ($_POST['password'] ?? '');
         $confirmPassword = (string) ($_POST['confirm_password'] ?? '');
 
-        if (mb_strlen($old['name']) < 2 || mb_strlen($old['name']) > 100) {
-            $errors[] = 'Full name must be between 2 and 100 characters.';
+        if ($old['name'] === '' || mb_strlen($old['name']) > 100) {
+            $errors[] = 'Full name is required and must be 100 characters or fewer.';
         }
 
         if (!filter_var($old['email'], FILTER_VALIDATE_EMAIL) || mb_strlen($old['email']) > 150) {
             $errors[] = 'Please enter a valid email address.';
-        } elseif (User::emailExists($old['email'])) {
+        } elseif (User::findByEmail($old['email']) !== null) {
             $errors[] = 'An account with that email already exists.';
         }
 
@@ -48,14 +45,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
 
         if (empty($errors)) {
-            User::create($old['name'], $old['email'], $password);
-            setFlash('success', 'Account created successfully! Please log in with your email and password.');
-            redirect('login.php');
+            $newId = User::create($old['name'], $old['email'], $password);
+            $newUser = User::find($newId);
+            if ($newUser !== null) {
+                Auth::login($newUser);
+                flash('success', 'Welcome to BookSwap, ' . $newUser['name'] . '! Start by adding your first book.');
+                redirect('my-books.php');
+            }
+            $errors[] = 'Something went wrong, try again.';
         }
     }
 }
 
-$pageTitle = 'Sign Up';
+$title = 'Sign Up';
 require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'header.php';
 ?>
 
@@ -75,7 +77,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                 </div>
             <?php endif; ?>
 
-            <form method="POST" action="<?= e(url('signup.php')) ?>" class="js-validate-form" novalidate>
+            <form method="POST" action="<?= e(url('signup.php')) ?>" class="needs-check" novalidate>
                 <?= Csrf::field() ?>
 
                 <div class="mb-3">
@@ -85,14 +87,13 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                            name="name"
                            class="form-control"
                            required
-                           minlength="2"
                            maxlength="100"
                            value="<?= e($old['name']) ?>">
-                    <div class="invalid-feedback">Please enter your full name (2-100 characters).</div>
+                    <div class="invalid-feedback"></div>
                 </div>
 
                 <div class="mb-3">
-                    <label for="email" class="form-label">Student Email</label>
+                    <label for="email" class="form-label">Email Address</label>
                     <input type="email"
                            id="email"
                            name="email"
@@ -100,7 +101,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                            required
                            maxlength="150"
                            value="<?= e($old['email']) ?>">
-                    <div class="invalid-feedback">Please enter a valid email address.</div>
+                    <div class="invalid-feedback"></div>
                 </div>
 
                 <div class="mb-3">
@@ -111,8 +112,8 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                            class="form-control"
                            required
                            minlength="8">
-                    <div class="form-text">Use at least 8 characters.</div>
-                    <div class="invalid-feedback">Password must be at least 8 characters.</div>
+                    <div class="form-text">Minimum 8 characters.</div>
+                    <div class="invalid-feedback"></div>
                 </div>
 
                 <div class="mb-4">
@@ -123,7 +124,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                            class="form-control"
                            required
                            minlength="8">
-                    <div class="invalid-feedback">Passwords must match.</div>
+                    <div class="invalid-feedback"></div>
                 </div>
 
                 <button type="submit" class="btn btn-primary w-100">Sign Up</button>

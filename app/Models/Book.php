@@ -8,11 +8,6 @@
 
 declare(strict_types=1);
 
-namespace App\Models;
-
-use App\Core\Database;
-use Throwable;
-
 class Book
 {
     /**
@@ -45,7 +40,7 @@ class Book
      */
     public static function getCategories(): array
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $stmt = $pdo->query('SELECT id, name FROM categories ORDER BY id ASC');
         return $stmt->fetchAll();
     }
@@ -55,7 +50,7 @@ class Book
      */
     public static function categoryExists(int $categoryId): bool
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $stmt = $pdo->prepare('SELECT 1 FROM categories WHERE id = ? LIMIT 1');
         $stmt->execute([$categoryId]);
         return $stmt->fetchColumn() !== false;
@@ -66,7 +61,7 @@ class Book
      */
     public static function searchAvailable(string $query = '', int $categoryId = 0, string $condition = ''): array
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
 
         $sql = 'SELECT b.id, b.owner_id, b.category_id, b.title, b.author,
                        b.book_condition, b.description, b.image, b.status, b.created_at,
@@ -111,7 +106,7 @@ class Book
      */
     public static function findByIdWithOwner(int $bookId): ?array
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $stmt = $pdo->prepare(
             'SELECT b.id, b.owner_id, b.category_id, b.title, b.author,
                     b.book_condition, b.description, b.image, b.status, b.created_at,
@@ -134,7 +129,7 @@ class Book
      */
     public static function findByOwner(int $ownerId): array
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $stmt = $pdo->prepare(
             "SELECT b.id, b.owner_id, b.category_id, b.title, b.author,
                     b.book_condition, b.description, b.image, b.status, b.created_at,
@@ -159,7 +154,7 @@ class Book
      */
     public static function findAvailableByOwner(int $ownerId): array
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $stmt = $pdo->prepare(
             'SELECT id, title, author, book_condition
              FROM books
@@ -176,7 +171,7 @@ class Book
      */
     public static function create(int $ownerId, array $data): int
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $stmt = $pdo->prepare(
             'INSERT INTO books
              (owner_id, category_id, title, author, book_condition, description, image, status)
@@ -201,7 +196,7 @@ class Book
      */
     public static function updateByOwner(int $bookId, int $ownerId, array $data): array
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $pdo->beginTransaction();
 
         try {
@@ -270,7 +265,7 @@ class Book
      */
     public static function deleteByOwner(int $bookId, int $ownerId): array
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $pdo->beginTransaction();
 
         try {
@@ -319,7 +314,7 @@ class Book
      */
     public static function deleteByAdmin(int $bookId): array
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $pdo->beginTransaction();
 
         try {
@@ -386,7 +381,7 @@ class Book
      */
     public static function listAllForAdmin(string $query = ''): array
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
 
         $sql = "SELECT b.id, b.title, b.author, b.book_condition, b.status, b.created_at,
                        COALESCE(c.name, 'Uncategorized') AS category_name,
@@ -416,7 +411,7 @@ class Book
      */
     public static function getStatsForAdmin(): array
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $stmt = $pdo->query(
             "SELECT
                 COUNT(*) AS total_books,
@@ -438,7 +433,7 @@ class Book
      */
     public static function getStatsForOwner(int $ownerId): array
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $stmt = $pdo->prepare(
             "SELECT
                 COUNT(*) AS total,

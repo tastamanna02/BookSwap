@@ -2,8 +2,8 @@
 /**
  * Shared Footer Partial
  *
- * Closes the main container, renders the page footer, loads Bootstrap 5 JS
- * via CDN, and includes the shared app.js plus any page-specific scripts.
+ * Closes <main>, renders small footer text, loads Bootstrap 5.3 JS bundle
+ * from jsDelivr, loads assets/js/app.js, and loads an optional $pageScript.
  */
 
 declare(strict_types=1);
@@ -11,9 +11,8 @@ declare(strict_types=1);
 </main>
 
 <footer class="bg-white border-top py-3 mt-auto">
-    <div class="container d-flex flex-column flex-sm-row justify-content-between align-items-center text-muted small gap-2">
-        <span>BookSwap &mdash; Student-to-Student Book Exchange</span>
-        <span>Free &bull; No Money Involved &bull; PHP 8 + MySQL</span>
+    <div class="container text-center text-muted">
+        <small>BookSwap &mdash; Student-to-Student Book Exchange &bull; No Money Involved</small>
     </div>
 </footer>
 
@@ -21,10 +20,8 @@ declare(strict_types=1);
         integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
         crossorigin="anonymous"></script>
 <script src="<?= e(url('assets/js/app.js')) ?>"></script>
-<?php if (!empty($pageScripts) && is_array($pageScripts)): ?>
-    <?php foreach ($pageScripts as $scriptPath): ?>
-        <script src="<?= e(url($scriptPath)) ?>"></script>
-    <?php endforeach; ?>
+<?php if (isset($pageScript) && is_string($pageScript) && $pageScript !== ''): ?>
+    <script src="<?= e(url($pageScript)) ?>"></script>
 <?php endif; ?>
 </body>
 </html>

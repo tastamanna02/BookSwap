@@ -9,12 +9,6 @@
 
 declare(strict_types=1);
 
-namespace App\Models;
-
-use App\Core\Database;
-use PDO;
-use Throwable;
-
 class Swap
 {
     /**
@@ -54,7 +48,7 @@ class Swap
             return ['ok' => false, 'message' => 'You cannot swap a book with itself.'];
         }
 
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $pdo->beginTransaction();
 
         try {
@@ -134,7 +128,7 @@ class Swap
             return ['ok' => false, 'message' => 'Invalid swap action.'];
         }
 
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $pdo->beginTransaction();
 
         try {
@@ -349,7 +343,7 @@ class Swap
      */
     public static function getUserSwapsGrouped(int $userId): array
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $stmt = $pdo->prepare(
             'SELECT sr.*,
                     req.name AS requester_name,
@@ -394,11 +388,26 @@ class Swap
     }
 
     /**
+     * Count incoming pending swap requests awaiting the given book owner's response.
+     */
+    public static function pendingIncoming(int $userId): int
+    {
+        $pdo = Database::pdo();
+        $stmt = $pdo->prepare(
+            "SELECT COUNT(*) FROM swap_requests
+             WHERE owner_id = ? AND status = 'pending'"
+        );
+        $stmt->execute([$userId]);
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
      * Count completed swaps for a given user.
      */
     public static function countCompletedForUser(int $userId): int
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $stmt = $pdo->prepare(
             "SELECT COUNT(*) FROM swap_requests
              WHERE status = 'completed' AND (requester_id = :u1 OR owner_id = :u2)"
@@ -413,7 +422,7 @@ class Swap
      */
     public static function getStatsForAdmin(): array
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $stmt = $pdo->query(
             "SELECT
                 SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_swaps,
@@ -435,7 +444,7 @@ class Swap
      */
     public static function listRecentForAdmin(int $limit = 15): array
     {
-        $pdo = Database::getConnection();
+        $pdo = Database::pdo();
         $stmt = $pdo->prepare(
             'SELECT sr.id, sr.status, sr.requester_confirmed, sr.owner_confirmed,
                     sr.created_at, sr.completed_at,

@@ -41,11 +41,11 @@
             if (row) {
                 row.remove();
             }
-            BookSwap.showAlert('global-alert', result.message || 'Book deleted by admin.', 'success');
+            BookSwap.showAlert('alerts', result.message || 'Book deleted by admin.', 'success');
         } else {
             btn.disabled = false;
             btn.textContent = 'Delete';
-            BookSwap.showAlert('global-alert', (result && result.message) || 'Something went wrong, try again.', 'danger');
+            BookSwap.showAlert('alerts', (result && result.message) || 'Something went wrong, try again.', 'danger');
         }
     });
 })();

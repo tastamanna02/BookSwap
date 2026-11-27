@@ -2,17 +2,14 @@
 /**
  * Login Page
  *
- * Verifies CSRF token and authenticates users using password_verify(),
- * including temporary account lockout after repeated failed attempts.
+ * Verifies CSRF, checks lockout via User::isLocked(), authenticates with
+ * password_verify(), tracks failed attempts via User::recordFailure(), and
+ * resets failures + regenerates session ID on success.
  */
 
 declare(strict_types=1);
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'bootstrap.php';
-
-use App\Core\Auth;
-use App\Core\Csrf;
-use App\Models\User;
 
 Auth::requireGuest();
 
@@ -20,29 +17,41 @@ $error = '';
 $email = '';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
-    if (!Csrf::verifyFormPost()) {
+    if (!Csrf::check($_POST['csrf_token'] ?? null)) {
         $error = 'Your security token expired. Please try logging in again.';
     } else {
         $email = trim((string) ($_POST['email'] ?? ''));
         $password = (string) ($_POST['password'] ?? '');
 
         if (!filter_var($email, FILTER_VALIDATE_EMAIL) || $password === '') {
-            $error = 'Please enter a valid email and password.';
+            $error = 'Wrong email or password';
         } else {
-            $result = User::verifyCredentials($email, $password);
-            if (!$result['ok'] || $result['user'] === null) {
-                $error = $result['message'] !== '' ? $result['message'] : 'Invalid email or password.';
+            $user = User::findByEmail($email);
+
+            if ($user !== null && User::isLocked($user)) {
+                $error = 'Too many failed attempts. Your account is temporarily locked. Please try again later.';
+            } elseif ($user === null || !password_verify($password, $user['password_hash'])) {
+                if ($user !== null) {
+                    User::recordFailure($user);
+                }
+                // Generic error avoids revealing whether the email or password was wrong
+                $error = 'Wrong email or password';
             } else {
-                $user = $result['user'];
+                // Rehash transparently if PHP's default hashing algorithm/cost changes
+                if (password_needs_rehash($user['password_hash'], PASSWORD_DEFAULT)) {
+                    User::updatePassword((int) $user['id'], $password);
+                }
+
+                User::resetFailures((int) $user['id']);
                 Auth::login($user);
-                setFlash('success', 'Welcome back, ' . $user['name'] . '!');
+                flash('success', 'Welcome back, ' . $user['name'] . '!');
                 redirect($user['role'] === 'admin' ? 'admin.php' : 'index.php');
             }
         }
     }
 }
 
-$pageTitle = 'Log In';
+$title = 'Log In';
 require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'header.php';
 ?>
 
@@ -56,7 +65,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                 <div class="alert alert-danger"><?= e($error) ?></div>
             <?php endif; ?>
 
-            <form method="POST" action="<?= e(url('login.php')) ?>" class="js-validate-form" novalidate>
+            <form method="POST" action="<?= e(url('login.php')) ?>" class="needs-check" novalidate>
                 <?= Csrf::field() ?>
 
                 <div class="mb-3">
@@ -67,7 +76,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                            class="form-control"
                            required
                            value="<?= e($email) ?>">
-                    <div class="invalid-feedback">Please enter your email address.</div>
+                    <div class="invalid-feedback"></div>
                 </div>
 
                 <div class="mb-4">
@@ -77,7 +86,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                            name="password"
                            class="form-control"
                            required>
-                    <div class="invalid-feedback">Please enter your password.</div>
+                    <div class="invalid-feedback"></div>
                 </div>
 
                 <button type="submit" class="btn btn-primary w-100">Log In</button>

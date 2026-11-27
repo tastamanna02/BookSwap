@@ -1,22 +1,72 @@
 <?php
 /**
- * Authentication & Authorization Helper
+ * Authentication & Role Authorization Helper
  *
- * Manages logged-in session state, role checks (guest, user, admin),
- * and server-side access guards for pages and JSON API endpoints.
+ * Manages session login state via $_SESSION['uid'], caches the current user,
+ * prevents session fixation on login, and enforces page access rules.
  */
 
 declare(strict_types=1);
 
-namespace App\Core;
-
-use App\Models\User;
-
 class Auth
 {
-    private const SESSION_USER_ID = 'user_id';
+    private const SESSION_UID = 'uid';
     private static ?array $cachedUser = null;
     private static bool $loaded = false;
+
+    /**
+     * Return the logged-in user row (cached per request), or null for guests.
+     */
+    public static function user(): ?array
+    {
+        if (self::$loaded) {
+            return self::$cachedUser;
+        }
+
+        self::$loaded = true;
+        $uid = $_SESSION[self::SESSION_UID] ?? null;
+
+        if (!is_int($uid) && !ctype_digit((string) $uid)) {
+            self::$cachedUser = null;
+            return null;
+        }
+
+        $user = User::find((int) $uid);
+        if ($user === null) {
+            unset($_SESSION[self::SESSION_UID]);
+            self::$cachedUser = null;
+            return null;
+        }
+
+        self::$cachedUser = $user;
+        return self::$cachedUser;
+    }
+
+    /**
+     * Return true when a user is currently authenticated.
+     */
+    public static function check(): bool
+    {
+        return self::user() !== null;
+    }
+
+    /**
+     * Return the logged-in user's ID, or null when browsing as guest.
+     */
+    public static function id(): ?int
+    {
+        $user = self::user();
+        return $user !== null ? (int) $user['id'] : null;
+    }
+
+    /**
+     * Return true only when the logged-in user has the 'admin' role.
+     */
+    public static function isAdmin(): bool
+    {
+        $user = self::user();
+        return $user !== null && ($user['role'] ?? 'user') === 'admin';
+    }
 
     /**
      * Log in a verified user and regenerate the session ID to stop session fixation.
@@ -24,16 +74,15 @@ class Auth
     public static function login(array $user): void
     {
         session_regenerate_id(true);
-        $_SESSION[self::SESSION_USER_ID] = (int) $user['id'];
+        $_SESSION[self::SESSION_UID] = (int) $user['id'];
 
-        // Strip sensitive hash if present before caching in memory
         unset($user['password_hash']);
         self::$cachedUser = $user;
         self::$loaded = true;
     }
 
     /**
-     * Destroy the user session and clear the session cookie cleanly.
+     * Clear session data, expire the session cookie, and destroy the session.
      */
     public static function logout(): void
     {
@@ -59,67 +108,12 @@ class Auth
     }
 
     /**
-     * Return the currently authenticated user row (fresh from DB once per request), or null.
-     */
-    public static function user(): ?array
-    {
-        if (self::$loaded) {
-            return self::$cachedUser;
-        }
-
-        self::$loaded = true;
-        $userId = $_SESSION[self::SESSION_USER_ID] ?? null;
-
-        if (!is_int($userId) && !ctype_digit((string) $userId)) {
-            self::$cachedUser = null;
-            return null;
-        }
-
-        $user = User::findById((int) $userId);
-        if ($user === null) {
-            // User record no longer exists; clean up stale session
-            unset($_SESSION[self::SESSION_USER_ID]);
-            self::$cachedUser = null;
-            return null;
-        }
-
-        self::$cachedUser = $user;
-        return self::$cachedUser;
-    }
-
-    /**
-     * True when a user is logged in.
-     */
-    public static function check(): bool
-    {
-        return self::user() !== null;
-    }
-
-    /**
-     * Return the logged-in user's ID, or null for guests.
-     */
-    public static function id(): ?int
-    {
-        $user = self::user();
-        return $user !== null ? (int) $user['id'] : null;
-    }
-
-    /**
-     * True only when the logged-in user has the 'admin' role in the database.
-     */
-    public static function isAdmin(): bool
-    {
-        $user = self::user();
-        return $user !== null && ($user['role'] ?? 'user') === 'admin';
-    }
-
-    /**
-     * Server-side guard for HTML pages that require authentication.
+     * Require a logged-in user, otherwise set a flash notice and redirect to login.php.
      */
     public static function requireLogin(): void
     {
         if (!self::check()) {
-            setFlash('warning', 'Please log in to access that page.');
+            flash('warning', 'Please log in to continue.');
             redirect('login.php');
         }
     }
@@ -135,7 +129,7 @@ class Auth
     }
 
     /**
-     * Server-side guard for admin-only HTML pages.
+     * Require an authenticated admin user, returning HTTP 403 for non-admins.
      */
     public static function requireAdmin(): void
     {
@@ -143,7 +137,7 @@ class Auth
 
         if (!self::isAdmin()) {
             http_response_code(403);
-            $pageTitle = 'Access Denied';
+            $title = 'Access Denied';
             require APP_ROOT . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'header.php';
             echo '<div class="alert alert-danger shadow-sm my-4">'
                 . '<h1 class="h5 mb-2">403 - Access Denied</h1>'
@@ -152,34 +146,6 @@ class Auth
                 . '</div>';
             require APP_ROOT . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'footer.php';
             exit;
-        }
-    }
-
-    /**
-     * Server-side guard for Fetch API endpoints requiring a logged-in user.
-     */
-    public static function requireApiLogin(): void
-    {
-        if (!self::check()) {
-            jsonResponse([
-                'ok'      => false,
-                'message' => 'Please log in to continue.',
-            ], 401);
-        }
-    }
-
-    /**
-     * Server-side guard for Fetch API endpoints requiring admin privileges.
-     */
-    public static function requireApiAdmin(): void
-    {
-        self::requireApiLogin();
-
-        if (!self::isAdmin()) {
-            jsonResponse([
-                'ok'      => false,
-                'message' => 'You do not have permission to perform this action.',
-            ], 403);
         }
     }
 }

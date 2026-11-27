@@ -111,11 +111,11 @@
         const result = await BookSwap.fetchJson(endpoint);
 
         if (!result || !result.ok) {
-            BookSwap.showAlert('global-alert', (result && result.message) || 'Something went wrong, try again.', 'danger');
+            BookSwap.showAlert('alerts', (result && result.message) || 'Something went wrong, try again.', 'danger');
             return;
         }
 
-        BookSwap.hideAlert('global-alert');
+        BookSwap.hideAlert('alerts');
         renderBooks(Array.isArray(result.books) ? result.books : []);
     }
 

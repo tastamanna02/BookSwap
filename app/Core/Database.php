@@ -1,61 +1,62 @@
 <?php
 /**
- * Database Connection Wrapper (PDO Singleton)
+ * Database Connection Singleton (PDO)
  *
- * Manages a single shared PDO connection to MySQL per request, configured with
- * exceptions on errors and real prepared statements (emulation disabled).
+ * Marked final so it cannot be subclassed. Provides one shared PDO instance
+ * per request with exceptions, associative fetches, and real prepared statements.
  */
 
 declare(strict_types=1);
 
-namespace App\Core;
-
-use PDO;
-
-class Database
+final class Database
 {
-    private static ?PDO $connection = null;
+    private static ?PDO $instance = null;
 
     /**
-     * Prevent direct instantiation; use Database::getConnection().
+     * Private constructor prevents creating Database objects directly.
      */
     private function __construct()
     {
     }
 
     /**
-     * Return the shared PDO connection, creating it on first call.
+     * Private clone prevents duplicating the singleton instance.
      */
-    public static function getConnection(): PDO
+    private function __clone()
     {
-        if (self::$connection !== null) {
-            return self::$connection;
+    }
+
+    /**
+     * Return the shared PDO connection, creating it on the first call.
+     */
+    public static function pdo(): PDO
+    {
+        if (self::$instance !== null) {
+            return self::$instance;
         }
 
-        $config = require APP_ROOT . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'database.php';
+        $cfg = require APP_ROOT . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'database.php';
 
         $dsn = sprintf(
-            'mysql:host=%s;port=%d;dbname=%s;charset=%s',
-            $config['host'],
-            (int) $config['port'],
-            $config['dbname'],
-            $config['charset']
+            'mysql:host=%s;dbname=%s;charset=utf8mb4',
+            $cfg['host'],
+            $cfg['name']
         );
 
-        self::$connection = new PDO(
+        self::$instance = new PDO(
             $dsn,
-            $config['username'],
-            $config['password'],
+            $cfg['user'],
+            $cfg['pass'],
             [
-                // Throw PDOException on database errors so transactions can roll back cleanly
+                // Throw PDOException on SQL errors so transactions can roll back safely
                 PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-                // Return associative arrays by default (e.g. $row['title'])
+                // Fetch rows as associative arrays like $row['title']
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                // Force real MySQL prepared statements for stronger SQL injection protection
+                // Use native MySQL prepared statements for stronger SQL injection defense
                 PDO::ATTR_EMULATE_PREPARES   => false,
             ]
         );
 
-        return self::$connection;
+        return self::$instance;
     }
 }

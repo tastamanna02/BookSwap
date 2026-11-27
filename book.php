@@ -10,19 +10,14 @@ declare(strict_types=1);
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'bootstrap.php';
 
-use App\Core\Auth;
-use App\Models\Book;
-
 $bookId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 if ($bookId === false || $bookId === null || $bookId <= 0) {
-    require __DIR__ . DIRECTORY_SEPARATOR . '404.php';
-    exit;
+    show_404();
 }
 
 $book = Book::findByIdWithOwner($bookId);
 if ($book === null) {
-    require __DIR__ . DIRECTORY_SEPARATOR . '404.php';
-    exit;
+    show_404();
 }
 
 $currentUserId = Auth::id();
@@ -31,8 +26,8 @@ $myAvailableBooks = ($currentUserId !== null && !$isOwner && $book['status'] ===
     ? Book::findAvailableByOwner($currentUserId)
     : [];
 
-$pageTitle = $book['title'];
-$pageScripts = ['assets/js/book-detail.js'];
+$title = $book['title'];
+$pageScript = 'assets/js/book-detail.js';
 require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'header.php';
 ?>
 

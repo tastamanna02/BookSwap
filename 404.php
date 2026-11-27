@@ -14,7 +14,7 @@ if (!headers_sent()) {
     http_response_code(404);
 }
 
-$pageTitle = 'Page Not Found';
+$title = 'Page Not Found';
 require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'header.php';
 ?>
 

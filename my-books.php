@@ -10,15 +10,12 @@ declare(strict_types=1);
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'bootstrap.php';
 
-use App\Core\Auth;
-use App\Models\Book;
-
 Auth::requireLogin();
 
 $books = Book::findByOwner((int) Auth::id());
 
-$pageTitle = 'My Books';
-$pageScripts = ['assets/js/my-books.js'];
+$title = 'My Books';
+$pageScript = 'assets/js/my-books.js';
 require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'header.php';
 ?>
 

@@ -41,7 +41,7 @@
             if (cardCol) {
                 cardCol.remove();
             }
-            BookSwap.showAlert('global-alert', result.message || 'Book deleted.', 'success');
+            BookSwap.showAlert('alerts', result.message || 'Book deleted.', 'success');
 
             if (listContainer.querySelectorAll('.js-book-item').length === 0) {
                 const emptyDiv = BookSwap.createEl('div', 'col-12');
@@ -56,7 +56,7 @@
         } else {
             btn.disabled = false;
             btn.textContent = 'Delete';
-            BookSwap.showAlert('global-alert', (result && result.message) || 'Something went wrong, try again.', 'danger');
+            BookSwap.showAlert('alerts', (result && result.message) || 'Something went wrong, try again.', 'danger');
         }
     });
 })();
