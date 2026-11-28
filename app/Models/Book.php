@@ -20,7 +20,68 @@ class Book
         'worn' => 'Worn',
     ];
 
+    /**
+     * Allowed price_type values mapped to human-friendly labels.
+     */
+    public const PRICE_TYPES = [
+        'fixed'      => 'Fixed price',
+        'bargaining' => 'Bargaining allowed',
+    ];
+
     private const MAX_UPLOAD_BYTES = 2 * 1024 * 1024; // 2 MB
+    private const MAX_PRICE = 9999999.99;
+
+    /**
+     * Validate and normalize optional book price and price_type.
+     * Empty price clears price_type back to 'fixed' and returns no error.
+     * Returns ['price' => ?string, 'price_type' => string, 'error' => ?string].
+     */
+    public static function validatePrice($rawPrice, $rawPriceType = 'fixed'): array
+    {
+        if ($rawPrice === null) {
+            return ['price' => null, 'price_type' => 'fixed', 'error' => null];
+        }
+
+        if (!is_scalar($rawPrice) || is_bool($rawPrice)) {
+            return ['price' => null, 'price_type' => 'fixed', 'error' => 'Price must be a valid number.'];
+        }
+
+        $priceStr = trim((string) $rawPrice);
+        if ($priceStr === '') {
+            return ['price' => null, 'price_type' => 'fixed', 'error' => null];
+        }
+
+        // Accept decimal numbers only (blocks scientific notation such as 1e5)
+        if (!is_numeric($priceStr) || !preg_match('/^-?(?:\d+(?:\.\d+)?|\.\d+)$/', $priceStr)) {
+            return ['price' => null, 'price_type' => 'fixed', 'error' => 'Price must be a valid number.'];
+        }
+
+        $numericPrice = (float) $priceStr;
+        if ($numericPrice <= 0) {
+            return ['price' => null, 'price_type' => 'fixed', 'error' => 'Price must be greater than 0.'];
+        }
+
+        if (preg_match('/\.(\d+)$/', $priceStr, $matches) && strlen($matches[1]) > 2) {
+            return ['price' => null, 'price_type' => 'fixed', 'error' => 'Price can have at most 2 decimal places.'];
+        }
+
+        if ($numericPrice > self::MAX_PRICE) {
+            return ['price' => null, 'price_type' => 'fixed', 'error' => 'Price cannot exceed 9999999.99.'];
+        }
+
+        $priceType = is_scalar($rawPriceType) && !is_bool($rawPriceType)
+            ? trim((string) $rawPriceType)
+            : '';
+        if (!array_key_exists($priceType, self::PRICE_TYPES)) {
+            return ['price' => null, 'price_type' => 'fixed', 'error' => 'Price type must be fixed or bargaining.'];
+        }
+
+        return [
+            'price'      => number_format($numericPrice, 2, '.', ''),
+            'price_type' => $priceType,
+            'error'      => null,
+        ];
+    }
 
     /**
      * Escape SQL LIKE wildcard characters so user searches match literal text.
@@ -59,7 +120,8 @@ class Book
         $pdo = Database::pdo();
         $stmt = $pdo->prepare(
             "SELECT b.id, b.owner_id, b.category_id, b.title, b.author,
-                    b.book_condition, b.description, b.image, b.status, b.created_at,
+                    b.book_condition, b.description, b.image, b.status,
+                    b.price, b.price_type, b.created_at,
                     u.name AS owner_name,
                     COALESCE(c.name, 'Uncategorized') AS category_name
              FROM books b
@@ -82,7 +144,8 @@ class Book
         $pdo = Database::pdo();
 
         $sql = "SELECT b.id, b.owner_id, b.category_id, b.title, b.author,
-                       b.book_condition, b.description, b.image, b.status, b.created_at,
+                       b.book_condition, b.description, b.image, b.status,
+                       b.price, b.price_type, b.created_at,
                        COALESCE(c.name, 'Uncategorized') AS category_name,
                        EXISTS(
                            SELECT 1 FROM swap_requests sr
@@ -113,11 +176,16 @@ class Book
      */
     public static function create(int $ownerId, array $data): int
     {
+        $priceCheck = self::validatePrice($data['price'] ?? null, $data['price_type'] ?? 'fixed');
+        if ($priceCheck['error'] !== null) {
+            throw new InvalidArgumentException($priceCheck['error']);
+        }
+
         $pdo = Database::pdo();
         $stmt = $pdo->prepare(
             'INSERT INTO books
-             (owner_id, category_id, title, author, book_condition, description, image, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+             (owner_id, category_id, title, author, book_condition, description, image, status, price, price_type)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $ownerId,
@@ -128,6 +196,8 @@ class Book
             $data['description'] !== '' ? $data['description'] : null,
             $data['image'] ?? null,
             'available',
+            $priceCheck['price'],
+            $priceCheck['price_type'],
         ]);
 
         return (int) $pdo->lastInsertId();
@@ -138,11 +208,17 @@ class Book
      */
     public static function update(int $id, array $data): bool
     {
+        $priceCheck = self::validatePrice($data['price'] ?? null, $data['price_type'] ?? 'fixed');
+        if ($priceCheck['error'] !== null) {
+            throw new InvalidArgumentException($priceCheck['error']);
+        }
+
         $pdo = Database::pdo();
         $stmt = $pdo->prepare(
             'UPDATE books
              SET category_id = ?, title = ?, author = ?,
-                 book_condition = ?, description = ?, image = ?
+                 book_condition = ?, description = ?, image = ?,
+                 price = ?, price_type = ?
              WHERE id = ?'
         );
 
@@ -153,6 +229,8 @@ class Book
             $data['book_condition'],
             $data['description'] !== '' ? $data['description'] : null,
             $data['image'] ?? null,
+            $priceCheck['price'],
+            $priceCheck['price_type'],
             $id,
         ]);
     }
@@ -233,7 +311,8 @@ class Book
         $where = $onlyAvailable ? "WHERE b.status = 'available'" : '';
         $stmt = $pdo->prepare(
             "SELECT b.id, b.owner_id, b.category_id, b.title, b.author,
-                    b.book_condition, b.description, b.image, b.status, b.created_at,
+                    b.book_condition, b.description, b.image, b.status,
+                    b.price, b.price_type, b.created_at,
                     u.name AS owner_name,
                     COALESCE(c.name, 'Uncategorized') AS category_name
              FROM books b
@@ -387,7 +466,8 @@ class Book
 
         // 3. Fetch paginated items with owner name and category name joined
         $selectSql = "SELECT b.id, b.owner_id, b.category_id, b.title, b.author,
-                             b.book_condition, b.description, b.image, b.status, b.created_at,
+                             b.book_condition, b.description, b.image, b.status,
+                             b.price, b.price_type, b.created_at,
                              u.name AS owner_name,
                              COALESCE(c.name, 'Uncategorized') AS category_name
                       FROM books b
@@ -483,7 +563,8 @@ class Book
     {
         $pdo = Database::pdo();
 
-        $sql = "SELECT b.id, b.title, b.author, b.book_condition, b.status, b.created_at,
+        $sql = "SELECT b.id, b.title, b.author, b.book_condition, b.status,
+                       b.price, b.price_type, b.created_at,
                        COALESCE(c.name, 'Uncategorized') AS category_name,
                        u.name AS owner_name, u.email AS owner_email
                 FROM books b

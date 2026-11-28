@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS books (
     description TEXT NULL,
     image VARCHAR(255) NULL DEFAULT NULL,
     status ENUM('available', 'reserved') NOT NULL DEFAULT 'available',
+    price DECIMAL(10,2) NULL DEFAULT NULL,
+    price_type ENUM('fixed', 'bargaining') NOT NULL DEFAULT 'fixed',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     -- Indexes speed up search and browse queries on index.php
