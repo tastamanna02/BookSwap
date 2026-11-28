@@ -2,8 +2,9 @@
 /**
  * My Swaps & Swap History Page
  *
- * Displays incoming swap requests, outgoing swap requests, and completed,
- * declined, or cancelled history. Actions use Fetch POST via assets/js/swaps.js.
+ * Loads Swap::forUser() and splits swaps into four groups:
+ * incoming (pending owner), outgoing (pending requester), active (accepted),
+ * and history (completed, declined, cancelled). Actions are handled by swaps.js.
  */
 
 declare(strict_types=1);
@@ -13,78 +14,129 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'boot
 Auth::requireLogin();
 
 $userId = (int) Auth::id();
-$grouped = Swap::getUserSwapsGrouped($userId);
+$allSwaps = Swap::forUser($userId);
+
+$groups = [
+    'incoming' => [],
+    'outgoing' => [],
+    'active'   => [],
+    'history'  => [],
+];
+
+foreach ($allSwaps as $swap) {
+    $status = (string) $swap['status'];
+
+    if ($status === 'pending') {
+        if ((int) $swap['owner_id'] === $userId) {
+            $groups['incoming'][] = $swap;
+        } else {
+            $groups['outgoing'][] = $swap;
+        }
+    } elseif ($status === 'accepted') {
+        $groups['active'][] = $swap;
+    } else {
+        $groups['history'][] = $swap;
+    }
+}
 
 /**
- * Helper to render one swap card with escaped HTML output.
+ * Render a single swap card cleanly with all user data escaped via e().
  */
-$renderSwapCard = static function (array $swap, string $mode) use ($userId): string {
+$renderSwapCard = static function (array $swap, string $group) use ($userId): string {
     $isOwner = ((int) $swap['owner_id'] === $userId);
-    $heading = $mode === 'incoming'
-        ? $swap['requester_name'] . ' wants your book'
-        : ($mode === 'outgoing'
-            ? 'You requested ' . $swap['owner_name'] . "'s book"
-            : $swap['requester_name'] . ' ⇄ ' . $swap['owner_name']);
+    $giveBook = $isOwner ? (string) $swap['requested_book_title'] : (string) $swap['offered_book_title'];
+    $getBook = $isOwner ? (string) $swap['offered_book_title'] : (string) $swap['requested_book_title'];
+    $otherName = $isOwner ? (string) $swap['requester_name'] : (string) $swap['owner_name'];
+    $rawDate = !empty($swap['completed_at']) ? (string) $swap['completed_at'] : (string) $swap['created_at'];
+    $dateLabel = !empty($swap['completed_at']) ? 'Completed' : 'Requested';
+    $formattedDate = date('M j, Y', strtotime($rawDate));
 
-    $badgeClass = statusBadgeClass($swap['status']);
-    $dateText = !empty($swap['completed_at'])
-        ? 'Completed: ' . $swap['completed_at']
-        : 'Created: ' . $swap['created_at'];
+    $swapId = (int) $swap['id'];
+    $status = (string) $swap['status'];
+    $iConfirmed = $isOwner ? ((int) $swap['owner_confirmed'] === 1) : ((int) $swap['requester_confirmed'] === 1);
+    $theyConfirmed = $isOwner ? ((int) $swap['requester_confirmed'] === 1) : ((int) $swap['owner_confirmed'] === 1);
 
     ob_start();
     ?>
-    <div class="card shadow-sm mb-3">
+    <div class="card border-0 shadow-sm mb-3">
         <div class="card-body">
-            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-                <h3 class="h6 mb-0"><?= e($heading) ?></h3>
-                <span class="badge text-uppercase <?= e($badgeClass) ?>"><?= e($swap['status']) ?></span>
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                <h3 class="h6 fw-bold mb-0">
+                    You give <span class="text-primary"><?= e($giveBook) ?></span>
+                    &harr;
+                    you get <span class="text-success"><?= e($getBook) ?></span>
+                </h3>
+                <?php if ($group === 'history'): ?>
+                    <span class="badge text-uppercase <?= e(statusBadgeClass($status)) ?>">
+                        <?= e($status) ?>
+                    </span>
+                <?php else: ?>
+                    <span class="badge text-uppercase <?= e(statusBadgeClass($status)) ?>">
+                        <?= e($status) ?>
+                    </span>
+                <?php endif; ?>
             </div>
 
-            <div class="row g-2 bg-light rounded p-2 mb-3 small">
-                <div class="col-md-6">
-                    <span class="text-muted d-block">Requested Book (<?= e($swap['owner_name']) ?>):</span>
-                    <strong><?= e($swap['requested_book_title']) ?></strong>
-                </div>
-                <div class="col-md-6">
-                    <span class="text-muted d-block">Offered Book (<?= e($swap['requester_name']) ?>):</span>
-                    <strong><?= e($swap['offered_book_title']) ?></strong>
-                </div>
+            <div class="small text-muted mb-3">
+                <span><strong>With:</strong> <?= e($otherName) ?></span>
+                <span class="mx-2">&bull;</span>
+                <span><strong><?= e($dateLabel) ?>:</strong> <?= e($formattedDate) ?></span>
             </div>
 
-            <?php if ($swap['status'] === 'accepted'): ?>
-                <?php
-                $myConfirmed = $isOwner ? ((int) $swap['owner_confirmed'] === 1) : ((int) $swap['requester_confirmed'] === 1);
-                $partnerConfirmed = $isOwner ? ((int) $swap['requester_confirmed'] === 1) : ((int) $swap['owner_confirmed'] === 1);
-                ?>
-                <div class="alert alert-info py-2 px-3 small mb-3">
-                    Dual Confirmation Status &mdash;
-                    <?= $myConfirmed ? 'You: Confirmed' : 'You: Pending confirmation' ?> |
-                    <?= $partnerConfirmed ? 'Partner: Confirmed' : 'Partner: Pending confirmation' ?>
+            <?php if ($group === 'active'): ?>
+                <div class="alert alert-info py-2 px-3 small mb-3 d-flex flex-wrap gap-3">
+                    <span>
+                        <?= $iConfirmed ? '&#10004;' : '&#9203;' ?>
+                        <strong>You:</strong> <?= $iConfirmed ? 'Confirmed' : 'Pending' ?>
+                    </span>
+                    <span>
+                        <?= $theyConfirmed ? '&#10004;' : '&#9203;' ?>
+                        <strong><?= e($otherName) ?>:</strong> <?= $theyConfirmed ? 'Confirmed' : 'Pending' ?>
+                    </span>
                 </div>
             <?php endif; ?>
 
-            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <span class="small text-muted"><?= e($dateText) ?></span>
-
-                <div class="d-flex flex-wrap gap-2">
-                    <?php if ($swap['status'] === 'pending' && $mode === 'incoming'): ?>
-                        <button type="button" class="btn btn-success btn-sm js-swap-action"
-                                data-swap-id="<?= e((string) $swap['id']) ?>" data-action="accept">Accept</button>
-                        <button type="button" class="btn btn-outline-danger btn-sm js-swap-action"
-                                data-swap-id="<?= e((string) $swap['id']) ?>" data-action="decline">Decline</button>
-                    <?php elseif ($swap['status'] === 'pending' && $mode === 'outgoing'): ?>
-                        <button type="button" class="btn btn-outline-secondary btn-sm js-swap-action"
-                                data-swap-id="<?= e((string) $swap['id']) ?>" data-action="cancel">Cancel Request</button>
-                    <?php elseif ($swap['status'] === 'accepted'): ?>
-                        <?php $alreadyConfirmed = $isOwner ? ((int) $swap['owner_confirmed'] === 1) : ((int) $swap['requester_confirmed'] === 1); ?>
-                        <?php if (!$alreadyConfirmed): ?>
-                            <button type="button" class="btn btn-primary btn-sm js-swap-action"
-                                    data-swap-id="<?= e((string) $swap['id']) ?>" data-action="confirm">Confirm Completed</button>
-                        <?php endif; ?>
-                        <button type="button" class="btn btn-outline-danger btn-sm js-swap-action"
-                                data-swap-id="<?= e((string) $swap['id']) ?>" data-action="cancel">Cancel Swap</button>
+            <div class="d-flex flex-wrap gap-2">
+                <?php if ($group === 'incoming'): ?>
+                    <button type="button"
+                            class="btn btn-success btn-sm"
+                            data-swap="<?= e((string) $swapId) ?>"
+                            data-do="accept">
+                        Accept
+                    </button>
+                    <button type="button"
+                            class="btn btn-outline-danger btn-sm"
+                            data-swap="<?= e((string) $swapId) ?>"
+                            data-do="decline"
+                            data-ask="Decline this swap request?">
+                        Decline
+                    </button>
+                <?php elseif ($group === 'outgoing'): ?>
+                    <button type="button"
+                            class="btn btn-outline-secondary btn-sm"
+                            data-swap="<?= e((string) $swapId) ?>"
+                            data-do="cancel"
+                            data-ask="Cancel this pending swap request?">
+                        Cancel
+                    </button>
+                <?php elseif ($group === 'active'): ?>
+                    <?php if (!$iConfirmed): ?>
+                        <button type="button"
+                                class="btn btn-primary btn-sm"
+                                data-swap="<?= e((string) $swapId) ?>"
+                                data-do="confirm"
+                                data-ask="Confirm that both books have been exchanged?">
+                            Confirm swap done
+                        </button>
                     <?php endif; ?>
-                </div>
+                    <button type="button"
+                            class="btn btn-outline-danger btn-sm"
+                            data-swap="<?= e((string) $swapId) ?>"
+                            data-do="cancel"
+                            data-ask="Cancel this accepted swap? Both books will become available again.">
+                        Cancel
+                    </button>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -97,75 +149,82 @@ $pageScript = 'assets/js/swaps.js';
 require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'header.php';
 ?>
 
-<div class="mb-4">
-    <h1 class="h3 fw-bold text-primary mb-1">My Swaps &amp; History</h1>
-    <p class="text-muted small mb-0">
-        Accept or decline offers, confirm exchanges once you meet, and review your full swap history.
-        A swap completes only when <strong>both</strong> students confirm.
-    </p>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+        <h1 class="h3 fw-bold text-primary mb-1">My Swaps</h1>
+        <p class="text-muted small mb-0">
+            Manage incoming requests, track outgoing proposals, and confirm completed exchanges.
+        </p>
+    </div>
+    <a href="<?= e(url('index.php')) ?>" class="btn btn-outline-primary btn-sm">Browse Books</a>
 </div>
 
-<div id="swaps-root" data-current-user-id="<?= e((string) $userId) ?>">
-    <ul class="nav nav-tabs mb-3" id="swapTabs" role="tablist">
-        <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="incoming-tab" data-bs-toggle="tab" data-bs-target="#incoming-pane"
-                    type="button" role="tab">
-                Incoming <span id="incoming-count" class="badge bg-primary ms-1"><?= count($grouped['incoming']) ?></span>
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="outgoing-tab" data-bs-toggle="tab" data-bs-target="#outgoing-pane"
-                    type="button" role="tab">
-                Outgoing <span id="outgoing-count" class="badge bg-secondary ms-1"><?= count($grouped['outgoing']) ?></span>
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#history-pane"
-                    type="button" role="tab">
-                Swap History <span id="history-count" class="badge bg-success ms-1"><?= count($grouped['history']) ?></span>
-            </button>
-        </li>
-    </ul>
-
-    <div class="tab-content">
-        <div class="tab-pane fade show active" id="incoming-pane" role="tabpanel">
-            <div id="incoming-list">
-                <?php if (empty($grouped['incoming'])): ?>
-                    <div class="card border-0 shadow-sm p-4 text-center text-muted">No incoming swap requests right now.</div>
-                <?php else: ?>
-                    <?php foreach ($grouped['incoming'] as $swap): ?>
-                        <?= $renderSwapCard($swap, 'incoming') ?>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-            </div>
-        </div>
-
-        <div class="tab-pane fade" id="outgoing-pane" role="tabpanel">
-            <div id="outgoing-list">
-                <?php if (empty($grouped['outgoing'])): ?>
-                    <div class="card border-0 shadow-sm p-4 text-center text-muted">You have no outgoing swap requests.</div>
-                <?php else: ?>
-                    <?php foreach ($grouped['outgoing'] as $swap): ?>
-                        <?= $renderSwapCard($swap, 'outgoing') ?>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-            </div>
-        </div>
-
-        <div class="tab-pane fade" id="history-pane" role="tabpanel">
-            <div id="history-list">
-                <?php if (empty($grouped['history'])): ?>
-                    <div class="card border-0 shadow-sm p-4 text-center text-muted">
-                        Your completed, declined, and cancelled swaps will appear here.
-                    </div>
-                <?php else: ?>
-                    <?php foreach ($grouped['history'] as $swap): ?>
-                        <?= $renderSwapCard($swap, 'history') ?>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-            </div>
+<?php if (empty($allSwaps)): ?>
+    <div class="card border-0 shadow-sm p-5 text-center text-muted">
+        <h2 class="h5 text-dark mb-2">No swaps yet</h2>
+        <p class="mb-3">Browse books listed by other students and propose your first book-for-book exchange.</p>
+        <div>
+            <a href="<?= e(url('index.php')) ?>" class="btn btn-primary btn-sm">Browse Available Books</a>
         </div>
     </div>
-</div>
+<?php else: ?>
+    <div id="swaps-root" class="row g-4">
+        <div class="col-12">
+            <h2 class="h5 fw-bold mb-3">
+                Incoming Requests
+                <span class="badge bg-danger ms-1"><?= e((string) count($groups['incoming'])) ?></span>
+            </h2>
+            <?php if (empty($groups['incoming'])): ?>
+                <div class="card border-0 shadow-sm p-3 text-muted small">No incoming pending requests.</div>
+            <?php else: ?>
+                <?php foreach ($groups['incoming'] as $swap): ?>
+                    <?= $renderSwapCard($swap, 'incoming') ?>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+
+        <div class="col-12">
+            <h2 class="h5 fw-bold mb-3">
+                Active Swaps
+                <span class="badge bg-primary ms-1"><?= e((string) count($groups['active'])) ?></span>
+            </h2>
+            <?php if (empty($groups['active'])): ?>
+                <div class="card border-0 shadow-sm p-3 text-muted small">No accepted swaps awaiting confirmation.</div>
+            <?php else: ?>
+                <?php foreach ($groups['active'] as $swap): ?>
+                    <?= $renderSwapCard($swap, 'active') ?>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+
+        <div class="col-12">
+            <h2 class="h5 fw-bold mb-3">
+                Outgoing Requests
+                <span class="badge bg-secondary ms-1"><?= e((string) count($groups['outgoing'])) ?></span>
+            </h2>
+            <?php if (empty($groups['outgoing'])): ?>
+                <div class="card border-0 shadow-sm p-3 text-muted small">You have no pending outgoing requests.</div>
+            <?php else: ?>
+                <?php foreach ($groups['outgoing'] as $swap): ?>
+                    <?= $renderSwapCard($swap, 'outgoing') ?>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+
+        <div class="col-12">
+            <h2 class="h5 fw-bold mb-3">
+                Swap History
+                <span class="badge bg-success ms-1"><?= e((string) count($groups['history'])) ?></span>
+            </h2>
+            <?php if (empty($groups['history'])): ?>
+                <div class="card border-0 shadow-sm p-3 text-muted small">Completed, declined, and cancelled swaps will appear here.</div>
+            <?php else: ?>
+                <?php foreach ($groups['history'] as $swap): ?>
+                    <?= $renderSwapCard($swap, 'history') ?>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+    </div>
+<?php endif; ?>
 
 <?php require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'footer.php'; ?>

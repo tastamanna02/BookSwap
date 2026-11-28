@@ -29,7 +29,7 @@ $myAvailableBooks = ($currentUserId !== null && !$isOwner && $book['status'] ===
 $listedDate = date('M j, Y', strtotime((string) $book['created_at']));
 
 $title = $book['title'];
-$pageScript = 'assets/js/book-detail.js';
+$pageScript = 'assets/js/book.js';
 require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'header.php';
 ?>
 
