@@ -200,6 +200,22 @@ function setLoading(button, on) {
             }
         }
 
+        // Optional numeric / price check (must be > 0, at most 2 decimals, max 9999999.99 if filled)
+        if (!errorMsg && (field.type === 'number' || field.name === 'price')) {
+            if (field.validity && field.validity.badInput) {
+                errorMsg = 'Price must be greater than 0';
+            } else if (trimmed !== '') {
+                const numericVal = Number(trimmed);
+                if (!/^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(trimmed) || !Number.isFinite(numericVal) || numericVal <= 0) {
+                    errorMsg = 'Price must be greater than 0';
+                } else if (/\.(\d+)$/.test(trimmed) && trimmed.split('.')[1].length > 2) {
+                    errorMsg = 'Price can have at most 2 decimal places.';
+                } else if (numericVal > 9999999.99) {
+                    errorMsg = 'Price cannot exceed 9999999.99.';
+                }
+            }
+        }
+
         const feedback = getFeedbackEl(field);
         if (feedback) {
             feedback.textContent = errorMsg;
@@ -222,6 +238,14 @@ function setLoading(button, on) {
                 if (field.tagName === 'SELECT' || field.type === 'file') {
                     field.addEventListener('change', () => {
                         validateField(field);
+                    });
+                }
+
+                if (field.type === 'number') {
+                    field.addEventListener('input', () => {
+                        if (field.classList.contains('is-invalid')) {
+                            validateField(field);
+                        }
                     });
                 }
 
@@ -261,6 +285,35 @@ function setLoading(button, on) {
                 }
             });
         });
+    });
+})();
+
+// (5b) Enable or disable Price type radios based on whether Price has input
+(function initBookPriceForm() {
+    document.addEventListener('DOMContentLoaded', () => {
+        const priceInput = document.getElementById('price');
+        const typeRadios = document.querySelectorAll('input[name="price_type"]');
+        if (!priceInput || typeRadios.length === 0) {
+            return;
+        }
+
+        function syncPriceTypeState() {
+            const hasPrice = priceInput.value.trim() !== '' || Boolean(priceInput.validity && priceInput.validity.badInput);
+            typeRadios.forEach((radio) => {
+                radio.disabled = !hasPrice;
+            });
+
+            if (!hasPrice) {
+                const fixedRadio = document.getElementById('price_type_fixed');
+                if (fixedRadio) {
+                    fixedRadio.checked = true;
+                }
+            }
+        }
+
+        syncPriceTypeState();
+        priceInput.addEventListener('input', syncPriceTypeState);
+        priceInput.addEventListener('change', syncPriceTypeState);
     });
 })();
 

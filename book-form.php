@@ -45,6 +45,8 @@ $form = [
     'author'         => $existingBook['author'] ?? '',
     'category_id'    => isset($existingBook['category_id']) ? (int) $existingBook['category_id'] : 0,
     'book_condition' => $existingBook['book_condition'] ?? 'good',
+    'price'          => isset($existingBook['price']) && $existingBook['price'] !== null ? (string) $existingBook['price'] : '',
+    'price_type'     => $existingBook['price_type'] ?? 'fixed',
     'description'    => $existingBook['description'] ?? '',
     'image'          => $existingBook['image'] ?? null,
 ];
@@ -59,6 +61,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $form['author'] = trim((string) ($_POST['author'] ?? ''));
         $form['category_id'] = isset($_POST['category_id']) ? (int) $_POST['category_id'] : 0;
         $form['book_condition'] = trim((string) ($_POST['book_condition'] ?? ''));
+        $rawPrice = trim((string) ($_POST['price'] ?? ''));
+        $rawPriceType = isset($_POST['price_type']) && is_string($_POST['price_type'])
+            ? trim($_POST['price_type'])
+            : 'fixed';
+        $form['price'] = $rawPrice;
+        $form['price_type'] = array_key_exists($rawPriceType, Book::PRICE_TYPES) ? $rawPriceType : 'fixed';
         $form['description'] = trim((string) ($_POST['description'] ?? ''));
         $removeImage = isset($_POST['remove_image']) && $_POST['remove_image'] === '1';
 
@@ -73,6 +81,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
         if (!array_key_exists($form['book_condition'], Book::CONDITIONS)) {
             $errors[] = 'Please choose a valid book condition.';
+        }
+        $priceCheck = Book::validatePrice($rawPrice, $rawPriceType);
+        if ($priceCheck['error'] !== null) {
+            $errors[] = $priceCheck['error'];
         }
         if (mb_strlen($form['description']) > 2000) {
             $errors[] = 'Description must be 2000 characters or fewer.';
@@ -99,6 +111,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 'title'          => $form['title'],
                 'author'         => $form['author'],
                 'book_condition' => $form['book_condition'],
+                'price'          => $priceCheck['price'],
+                'price_type'     => $priceCheck['price_type'],
                 'description'    => $form['description'],
                 'image'          => $imageToSave,
             ];
@@ -204,6 +218,45 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                             <?php endforeach; ?>
                         </select>
                         <div class="invalid-feedback"></div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="price" class="form-label">Price (Tk) <span class="text-muted small">(optional)</span></label>
+                        <input type="number"
+                               id="price"
+                               name="price"
+                               class="form-control"
+                               min="1"
+                               step="0.01"
+                               placeholder="Leave empty for swap only"
+                               value="<?= e($form['price']) ?>">
+                        <div class="invalid-feedback"></div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <span class="form-label d-block">Price type</span>
+                        <div class="d-flex flex-wrap gap-2" role="group" aria-label="Price type" id="price-type-group">
+                            <input type="radio"
+                                   class="btn-check"
+                                   name="price_type"
+                                   id="price_type_fixed"
+                                   value="fixed"
+                                   autocomplete="off"
+                                   <?= $form['price_type'] !== 'bargaining' ? 'checked' : '' ?>
+                                   <?= $form['price'] === '' ? 'disabled' : '' ?>>
+                            <label class="btn btn-outline-primary flex-fill" for="price_type_fixed">Fixed price</label>
+
+                            <input type="radio"
+                                   class="btn-check"
+                                   name="price_type"
+                                   id="price_type_bargaining"
+                                   value="bargaining"
+                                   autocomplete="off"
+                                   <?= $form['price_type'] === 'bargaining' ? 'checked' : '' ?>
+                                   <?= $form['price'] === '' ? 'disabled' : '' ?>>
+                            <label class="btn btn-outline-primary flex-fill" for="price_type_bargaining">Bargaining price</label>
+                        </div>
+                        <div class="form-text">Fixed = the price is final. Bargaining = buyers can negotiate.</div>
                     </div>
 
                     <div class="col-12">
