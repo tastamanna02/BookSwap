@@ -1,0 +1,2 @@
+# Block all direct HTTP access to SQL schema and seed files
+Require all denied

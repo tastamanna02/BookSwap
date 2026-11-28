@@ -1,0 +1,9 @@
+# Ignore user-uploaded files inside uploads/ while keeping .htaccess and .gitkeep
+uploads/*
+!uploads/.htaccess
+!uploads/.gitkeep
+
+# Ignore OS and local log clutter
+.DS_Store
+Thumbs.db
+*.log

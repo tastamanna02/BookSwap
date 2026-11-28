@@ -1,0 +1,2 @@
+# Block all direct HTTP access to bootstrap, Core classes, and Models
+Require all denied

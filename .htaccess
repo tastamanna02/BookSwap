@@ -1,0 +1,7 @@
+# Disable directory browsing across the whole project
+Options -Indexes
+
+# Custom 404 page
+# Note: If BookSwap is hosted inside a XAMPP subfolder such as
+# http://localhost/BookSwap/, change this path to: ErrorDocument 404 /BookSwap/404.php
+ErrorDocument 404 /404.php

@@ -1,0 +1,2 @@
+# Block all direct HTTP access to database configuration and credentials
+Require all denied
