@@ -49,40 +49,41 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
     <?php endforeach; ?>
 </div>
 
-<div class="card border-0 shadow-sm p-4 mb-4">
+<div class="card border-0 shadow-sm p-3 p-md-4 mb-4">
     <h2 class="h5 fw-bold mb-3">10 Most Recent Books</h2>
     <div class="table-responsive">
         <table class="table table-hover align-middle small mb-0">
             <thead class="table-light">
                 <tr>
-                    <th>ID</th>
+                    <th class="d-none d-md-table-cell">ID</th>
                     <th>Title &amp; Author</th>
-                    <th>Category</th>
-                    <th>Owner</th>
+                    <th class="d-none d-md-table-cell">Category</th>
+                    <th class="d-none d-md-table-cell">Owner</th>
                     <th>Status</th>
                     <th class="text-end">Action</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="admin-recent-tbody">
                 <?php if (empty($recentBooks)): ?>
-                    <tr>
+                    <tr id="admin-recent-empty">
                         <td colspan="6" class="text-center text-muted py-3">No books listed yet.</td>
                     </tr>
                 <?php else: ?>
                     <?php foreach ($recentBooks as $book): ?>
                         <?php $rowId = 'admin-book-' . (int) $book['id']; ?>
                         <tr id="<?= e($rowId) ?>">
-                            <td>#<?= e((string) $book['id']) ?></td>
-                            <td>
+                            <td class="d-none d-md-table-cell">#<?= e((string) $book['id']) ?></td>
+                            <td class="text-break">
                                 <a href="<?= e(url('book.php?id=' . (int) $book['id'])) ?>" class="fw-semibold text-decoration-none">
                                     <?= e($book['title']) ?>
                                 </a>
                                 <div class="text-muted">
                                     <?= e($book['author']) ?> &bull; <?= e(Book::CONDITIONS[$book['book_condition']] ?? ucfirst($book['book_condition'])) ?>
+                                    <span class="d-md-none"> &bull; <?= e($book['owner_name']) ?></span>
                                 </div>
                             </td>
-                            <td><?= e($book['category_name']) ?></td>
-                            <td><?= e($book['owner_name']) ?></td>
+                            <td class="d-none d-md-table-cell"><?= e($book['category_name']) ?></td>
+                            <td class="d-none d-md-table-cell text-break"><?= e($book['owner_name']) ?></td>
                             <td>
                                 <span class="badge text-uppercase <?= e(statusBadgeClass($book['status'])) ?>">
                                     <?= e($book['status']) ?>
@@ -104,17 +105,17 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
     </div>
 </div>
 
-<div class="card border-0 shadow-sm p-4">
+<div class="card border-0 shadow-sm p-3 p-md-4">
     <h2 class="h5 fw-bold mb-3">All Users</h2>
     <div class="table-responsive">
         <table class="table table-hover align-middle small mb-0">
             <thead class="table-light">
                 <tr>
                     <th>Name</th>
-                    <th>Email</th>
+                    <th class="d-none d-sm-table-cell">Email</th>
                     <th>Role</th>
                     <th>Books</th>
-                    <th>Joined</th>
+                    <th class="d-none d-md-table-cell">Joined</th>
                 </tr>
             </thead>
             <tbody>
@@ -125,15 +126,18 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                 <?php else: ?>
                     <?php foreach ($users as $u): ?>
                         <tr>
-                            <td class="fw-semibold"><?= e($u['name']) ?></td>
-                            <td><?= e($u['email']) ?></td>
+                            <td class="fw-semibold text-break">
+                                <?= e($u['name']) ?>
+                                <div class="small fw-normal text-muted text-break d-sm-none"><?= e($u['email']) ?></div>
+                            </td>
+                            <td class="d-none d-sm-table-cell text-break"><?= e($u['email']) ?></td>
                             <td>
                                 <span class="badge text-uppercase <?= e($u['role'] === 'admin' ? 'bg-warning text-dark' : 'bg-secondary') ?>">
                                     <?= e($u['role']) ?>
                                 </span>
                             </td>
                             <td><?= e((string) ((int) $u['book_count'])) ?></td>
-                            <td><?= e(date('M j, Y', strtotime((string) $u['created_at']))) ?></td>
+                            <td class="d-none d-md-table-cell"><?= e(date('M j, Y', strtotime((string) $u['created_at']))) ?></td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>

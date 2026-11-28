@@ -33,6 +33,7 @@ $pendingIncoming = $currentUser !== null ? Swap::pendingIncoming((int) $currentU
     <link rel="stylesheet" href="<?= e(url('assets/css/style.css')) ?>">
 </head>
 <body class="d-flex flex-column min-vh-100 bg-light">
+<a class="visually-hidden-focusable skip-link" href="#main-content">Skip to main content</a>
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
     <div class="container">
         <a class="navbar-brand fw-bold" href="<?= e(url('index.php')) ?>">BookSwap</a>
@@ -116,8 +117,8 @@ $pendingIncoming = $currentUser !== null ? Swap::pendingIncoming((int) $currentU
     </div>
 </nav>
 
-<main class="container py-4 flex-grow-1">
-    <div id="alerts">
+<main id="main-content" tabindex="-1" class="container py-4 flex-grow-1">
+    <div id="alerts" aria-live="polite">
         <?php if ($flash !== null): ?>
             <div class="alert alert-<?= e($flash['type']) ?> alert-dismissible fade show" role="alert">
                 <?= e($flash['msg']) ?>

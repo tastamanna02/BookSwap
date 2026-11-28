@@ -310,6 +310,17 @@ document.addEventListener('click', async (event) => {
             myBooksContainer.replaceChildren(emptyBox);
         }
 
+        // Show an empty-state row in the Admin recent books table if all rows were removed.
+        const adminRecentTbody = document.getElementById('admin-recent-tbody');
+        if (adminRecentTbody && adminRecentTbody.querySelectorAll('tr').length === 0) {
+            const emptyRow = document.createElement('tr');
+            emptyRow.id = 'admin-recent-empty';
+            const emptyCell = BookSwap.createEl('td', 'text-center text-muted py-3', 'No books listed yet.');
+            emptyCell.colSpan = 6;
+            emptyRow.appendChild(emptyCell);
+            adminRecentTbody.appendChild(emptyRow);
+        }
+
         showAlert(result.message || 'Book deleted successfully.', 'success');
     } else {
         setLoading(btn, false);

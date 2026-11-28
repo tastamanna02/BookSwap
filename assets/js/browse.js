@@ -201,6 +201,12 @@
         if (spinnerEl) {
             spinnerEl.classList.remove('d-none');
         }
+        if (gridEl) {
+            gridEl.setAttribute('aria-busy', 'true');
+        }
+        if (countEl) {
+            countEl.textContent = 'Loading books...';
+        }
 
         const params = new URLSearchParams();
         const qVal = qInput ? qInput.value.trim() : '';
@@ -220,8 +226,14 @@
         if (spinnerEl) {
             spinnerEl.classList.add('d-none');
         }
+        if (gridEl) {
+            gridEl.setAttribute('aria-busy', 'false');
+        }
 
         if (!result || !result.ok) {
+            if (countEl) {
+                countEl.textContent = 'Could not load books.';
+            }
             showAlert((result && result.message) || 'Something went wrong, try again.', 'danger');
             return;
         }

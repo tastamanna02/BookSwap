@@ -21,7 +21,7 @@ $pageScript = 'assets/js/browse.js';
 require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'header.php';
 ?>
 
-<section class="p-4 p-md-5 mb-4 rounded-3 bg-white border shadow-sm">
+<section class="p-3 p-md-5 mb-4 rounded-3 bg-white border shadow-sm">
     <div class="row align-items-center g-3">
         <div class="col-lg-8">
             <h1 class="h2 fw-bold text-primary mb-2">Swap Textbooks &amp; Novels with Fellow Students</h1>
@@ -30,13 +30,13 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                 a free book-for-book exchange. A swap completes only when both students confirm.
             </p>
         </div>
-        <div class="col-lg-4 text-lg-end">
+        <div class="col-lg-4 d-flex flex-wrap gap-2 justify-content-lg-end">
             <?php if ($currentUserId > 0): ?>
                 <a href="<?= e(url('book-form.php')) ?>" class="btn btn-primary">+ List a Book</a>
-                <a href="<?= e(url('my-books.php')) ?>" class="btn btn-outline-primary ms-2">My Books</a>
+                <a href="<?= e(url('my-books.php')) ?>" class="btn btn-outline-primary">My Books</a>
             <?php else: ?>
                 <a href="<?= e(url('signup.php')) ?>" class="btn btn-primary">Create Account</a>
-                <a href="<?= e(url('login.php')) ?>" class="btn btn-outline-primary ms-2">Log In</a>
+                <a href="<?= e(url('login.php')) ?>" class="btn btn-outline-primary">Log In</a>
             <?php endif; ?>
         </div>
     </div>

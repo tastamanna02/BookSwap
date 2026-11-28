@@ -56,7 +56,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                             $rowId = 'book-' . (int) $book['id'];
                             ?>
                             <tr id="<?= e($rowId) ?>">
-                                <td>
+                                <td class="text-break">
                                     <a href="<?= e(url('book.php?id=' . (int) $book['id'])) ?>"
                                        class="fw-semibold text-decoration-none">
                                         <?= e($book['title']) ?>
@@ -71,17 +71,19 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                                         <?= e($badgeLabel) ?>
                                     </span>
                                 </td>
-                                <td class="text-end text-nowrap">
-                                    <a href="<?= e(url('book-form.php?id=' . (int) $book['id'])) ?>"
-                                       class="btn btn-outline-primary btn-sm me-1">
-                                        Edit
-                                    </a>
-                                    <button type="button"
-                                            class="btn btn-outline-danger btn-sm"
-                                            data-delete-book="<?= e((string) $book['id']) ?>"
-                                            data-row="<?= e($rowId) ?>">
-                                        Delete
-                                    </button>
+                                <td class="text-end">
+                                    <div class="d-flex flex-wrap justify-content-end gap-1">
+                                        <a href="<?= e(url('book-form.php?id=' . (int) $book['id'])) ?>"
+                                           class="btn btn-outline-primary btn-sm">
+                                            Edit
+                                        </a>
+                                        <button type="button"
+                                                class="btn btn-outline-danger btn-sm"
+                                                data-delete-book="<?= e((string) $book['id']) ?>"
+                                                data-row="<?= e($rowId) ?>">
+                                            Delete
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
