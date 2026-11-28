@@ -225,11 +225,12 @@ class Book
     }
 
     /**
-     * Fetch the most recently listed available books.
+     * Fetch the most recently listed books (optionally filtered to available only).
      */
-    public static function recent(int $limit = 12): array
+    public static function recent(int $limit = 12, bool $onlyAvailable = true): array
     {
         $pdo = Database::pdo();
+        $where = $onlyAvailable ? "WHERE b.status = 'available'" : '';
         $stmt = $pdo->prepare(
             "SELECT b.id, b.owner_id, b.category_id, b.title, b.author,
                     b.book_condition, b.description, b.image, b.status, b.created_at,
@@ -238,7 +239,7 @@ class Book
              FROM books b
              INNER JOIN users u ON b.owner_id = u.id
              LEFT JOIN categories c ON b.category_id = c.id
-             WHERE b.status = 'available'
+             $where
              ORDER BY b.created_at DESC, b.id DESC
              LIMIT ?"
         );

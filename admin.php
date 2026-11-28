@@ -2,8 +2,8 @@
 /**
  * Admin Dashboard Page
  *
- * Strictly protected by Auth::requireAdmin() on the server. Displays platform
- * metrics, all listed books with admin delete capability, and recent swaps.
+ * Protected server-side by Auth::requireAdmin(). Displays 7 platform stat cards,
+ * the 10 most recent books with [data-delete-book] moderation, and all users.
  */
 
 declare(strict_types=1);
@@ -12,12 +12,22 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'boot
 
 Auth::requireAdmin();
 
-$search = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
-$totalUsers = User::count();
-$bookStats = Book::counts();
+$totalUsers = (int) User::count();
+$bookCounts = Book::counts();
 $swapStats = Swap::stats();
-$allBooks = Book::listAllForAdmin($search);
-$recentSwaps = Swap::listRecentForAdmin(15);
+
+$statCards = [
+    ['label' => 'Users',               'value' => $totalUsers],
+    ['label' => 'Books Listed',        'value' => (int) ($bookCounts['total'] ?? 0)],
+    ['label' => 'Available Books',     'value' => (int) ($bookCounts['available'] ?? 0)],
+    ['label' => 'Pending Swaps',       'value' => (int) ($swapStats['pending'] ?? 0)],
+    ['label' => 'Active Swaps',        'value' => (int) ($swapStats['accepted'] ?? 0)],
+    ['label' => 'Completed Swaps',     'value' => (int) ($swapStats['completed'] ?? 0)],
+    ['label' => 'Completed This Week', 'value' => (int) ($swapStats['completed_7d'] ?? 0)],
+];
+
+$recentBooks = Book::recent(10, false);
+$users = User::all();
 
 $title = 'Admin Dashboard';
 require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'header.php';
@@ -25,55 +35,22 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
 
 <div class="mb-4">
     <h1 class="h3 fw-bold text-primary mb-1">Admin Dashboard</h1>
-    <p class="text-muted small mb-0">Monitor student activity and moderate any book listing.</p>
+    <p class="text-muted small mb-0">Platform metrics, recent book moderation, and registered accounts.</p>
 </div>
 
 <div class="row g-3 mb-4">
-    <div class="col-sm-6 col-lg-3">
-        <div class="card border-0 shadow-sm p-3 stat-card">
-            <span class="text-muted small">Registered Users</span>
-            <span class="h4 fw-bold mb-0"><?= e((string) $totalUsers) ?></span>
+    <?php foreach ($statCards as $card): ?>
+        <div class="col-6 col-md-4 col-lg-3">
+            <div class="card border-0 shadow-sm p-3 stat-card h-100">
+                <span class="text-muted small"><?= e($card['label']) ?></span>
+                <span class="h4 fw-bold mb-0"><?= e((string) $card['value']) ?></span>
+            </div>
         </div>
-    </div>
-    <div class="col-sm-6 col-lg-3">
-        <div class="card border-0 shadow-sm p-3 stat-card">
-            <span class="text-muted small">Total Books (<?= e((string) $bookStats['available']) ?> available)</span>
-            <span class="h4 fw-bold mb-0"><?= e((string) $bookStats['total']) ?></span>
-        </div>
-    </div>
-    <div class="col-sm-6 col-lg-3">
-        <div class="card border-0 shadow-sm p-3 stat-card">
-            <span class="text-muted small">Open Swaps (Pending / Accepted)</span>
-            <span class="h4 fw-bold mb-0">
-                <?= e((string) ($swapStats['pending'] + $swapStats['accepted'])) ?>
-            </span>
-        </div>
-    </div>
-    <div class="col-sm-6 col-lg-3">
-        <div class="card border-0 shadow-sm p-3 stat-card">
-            <span class="text-muted small">Completed Swaps (<?= e((string) $swapStats['completed_7d']) ?> in 7d)</span>
-            <span class="h4 fw-bold mb-0"><?= e((string) $swapStats['completed']) ?></span>
-        </div>
-    </div>
+    <?php endforeach; ?>
 </div>
 
 <div class="card border-0 shadow-sm p-4 mb-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <h2 class="h5 fw-bold mb-0">All Book Listings</h2>
-        <form method="GET" action="<?= e(url('admin.php')) ?>" class="d-flex gap-2">
-            <input type="text"
-                   name="q"
-                   maxlength="100"
-                   class="form-control form-control-sm"
-                   placeholder="Filter title, author, owner..."
-                   value="<?= e($search) ?>">
-            <button type="submit" class="btn btn-primary btn-sm">Filter</button>
-            <?php if ($search !== ''): ?>
-                <a href="<?= e(url('admin.php')) ?>" class="btn btn-outline-secondary btn-sm">Clear</a>
-            <?php endif; ?>
-        </form>
-    </div>
-
+    <h2 class="h5 fw-bold mb-3">10 Most Recent Books</h2>
     <div class="table-responsive">
         <table class="table table-hover align-middle small mb-0">
             <thead class="table-light">
@@ -86,26 +63,26 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                     <th class="text-end">Action</th>
                 </tr>
             </thead>
-            <tbody id="admin-books-body">
-                <?php if (empty($allBooks)): ?>
+            <tbody>
+                <?php if (empty($recentBooks)): ?>
                     <tr>
-                        <td colspan="6" class="text-center text-muted py-3">No books found.</td>
+                        <td colspan="6" class="text-center text-muted py-3">No books listed yet.</td>
                     </tr>
                 <?php else: ?>
-                    <?php foreach ($allBooks as $book): ?>
-                        <tr id="admin-book-row-<?= e((string) $book['id']) ?>">
+                    <?php foreach ($recentBooks as $book): ?>
+                        <?php $rowId = 'admin-book-' . (int) $book['id']; ?>
+                        <tr id="<?= e($rowId) ?>">
                             <td>#<?= e((string) $book['id']) ?></td>
                             <td>
                                 <a href="<?= e(url('book.php?id=' . (int) $book['id'])) ?>" class="fw-semibold text-decoration-none">
                                     <?= e($book['title']) ?>
                                 </a>
-                                <div class="text-muted"><?= e($book['author']) ?> &bull; <?= e(Book::CONDITIONS[$book['book_condition']] ?? ucfirst($book['book_condition'])) ?></div>
+                                <div class="text-muted">
+                                    <?= e($book['author']) ?> &bull; <?= e(Book::CONDITIONS[$book['book_condition']] ?? ucfirst($book['book_condition'])) ?>
+                                </div>
                             </td>
                             <td><?= e($book['category_name']) ?></td>
-                            <td>
-                                <?= e($book['owner_name']) ?>
-                                <div class="text-muted"><?= e($book['owner_email']) ?></div>
-                            </td>
+                            <td><?= e($book['owner_name']) ?></td>
                             <td>
                                 <span class="badge text-uppercase <?= e(statusBadgeClass($book['status'])) ?>">
                                     <?= e($book['status']) ?>
@@ -115,7 +92,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                                 <button type="button"
                                         class="btn btn-outline-danger btn-sm"
                                         data-delete-book="<?= e((string) $book['id']) ?>"
-                                        data-row="admin-book-row-<?= e((string) $book['id']) ?>">
+                                        data-row="<?= e($rowId) ?>">
                                     Delete
                                 </button>
                             </td>
@@ -128,37 +105,35 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
 </div>
 
 <div class="card border-0 shadow-sm p-4">
-    <h2 class="h5 fw-bold mb-3">Recent Swaps Overview</h2>
+    <h2 class="h5 fw-bold mb-3">All Users</h2>
     <div class="table-responsive">
-        <table class="table table-sm align-middle small mb-0">
+        <table class="table table-hover align-middle small mb-0">
             <thead class="table-light">
                 <tr>
-                    <th>ID</th>
-                    <th>Requester</th>
-                    <th>Offered Book</th>
-                    <th>Owner</th>
-                    <th>Requested Book</th>
-                    <th>Status</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Books</th>
+                    <th>Joined</th>
                 </tr>
             </thead>
             <tbody>
-                <?php if (empty($recentSwaps)): ?>
+                <?php if (empty($users)): ?>
                     <tr>
-                        <td colspan="6" class="text-center text-muted py-3">No swap requests yet.</td>
+                        <td colspan="5" class="text-center text-muted py-3">No registered users yet.</td>
                     </tr>
                 <?php else: ?>
-                    <?php foreach ($recentSwaps as $swap): ?>
-                        <tr id="admin-book-row-<?= e((string) $book['id']) ?>">
-                            <td>#<?= e((string) $swap['id']) ?></td>
-                            <td><?= e($swap['requester_name']) ?></td>
-                            <td><?= e($swap['offered_book_title']) ?></td>
-                            <td><?= e($swap['owner_name']) ?></td>
-                            <td><?= e($swap['requested_book_title']) ?></td>
+                    <?php foreach ($users as $u): ?>
+                        <tr>
+                            <td class="fw-semibold"><?= e($u['name']) ?></td>
+                            <td><?= e($u['email']) ?></td>
                             <td>
-                                <span class="badge text-uppercase <?= e(statusBadgeClass($swap['status'])) ?>">
-                                    <?= e($swap['status']) ?>
+                                <span class="badge text-uppercase <?= e($u['role'] === 'admin' ? 'bg-warning text-dark' : 'bg-secondary') ?>">
+                                    <?= e($u['role']) ?>
                                 </span>
                             </td>
+                            <td><?= e((string) ((int) $u['book_count'])) ?></td>
+                            <td><?= e(date('M j, Y', strtotime((string) $u['created_at']))) ?></td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>
