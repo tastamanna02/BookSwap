@@ -13,6 +13,13 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'boot
 
 $q = isset($_GET['q']) && is_string($_GET['q']) ? mb_substr(trim($_GET['q']), 0, 100) : '';
 $categoryId = isset($_GET['category']) ? (int) $_GET['category'] : (int) ($_GET['category_id'] ?? 0);
+$priceMaxInput = isset($_GET['price_max']) && is_string($_GET['price_max']) ? trim($_GET['price_max']) : '';
+if ($priceMaxInput !== '' && (!is_numeric($priceMaxInput) || (float) $priceMaxInput < 0)) {
+    $priceMaxInput = '';
+}
+$rawSwapOnly = $_GET['swap_only'] ?? ($_GET['swap-only'] ?? '');
+$swapOnly = is_string($rawSwapOnly)
+    && in_array(strtolower(trim($rawSwapOnly)), ['1', 'true', 'yes', 'on'], true);
 $categories = Book::categories();
 $currentUserId = Auth::id() ?? 0;
 
@@ -44,7 +51,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
 
 <form id="search-form" method="GET" action="<?= e(url('index.php')) ?>" class="card border-0 shadow-sm p-3 mb-4">
     <div class="row g-2 align-items-end">
-        <div class="col-md-6">
+        <div class="col-12 col-md-4">
             <label for="q" class="form-label small fw-semibold mb-1">Search Title or Author</label>
             <input type="text"
                    id="q"
@@ -54,7 +61,19 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                    placeholder="e.g. Clean Code, Mankiw..."
                    value="<?= e($q) ?>">
         </div>
-        <div class="col-md-4">
+        <div class="col-6 col-md-2">
+            <label for="price_max" class="form-label small fw-semibold mb-1">Max price (Tk)</label>
+            <input type="number"
+                   id="price_max"
+                   name="price_max"
+                   min="1"
+                   step="0.01"
+                   class="form-control"
+                   placeholder="Any"
+                   value="<?= e($priceMaxInput) ?>"
+                   <?= $swapOnly ? 'disabled' : '' ?>>
+        </div>
+        <div class="col-6 col-md-3">
             <label for="category" class="form-label small fw-semibold mb-1">Category</label>
             <select id="category" name="category" class="form-select">
                 <option value="0">All Categories</option>
@@ -65,7 +84,20 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                 <?php endforeach; ?>
             </select>
         </div>
-        <div class="col-md-2 d-grid">
+        <div class="col-6 col-md-auto d-flex align-items-center pb-md-2">
+            <div class="form-check mb-0">
+                <input class="form-check-input"
+                       type="checkbox"
+                       id="swap_only"
+                       name="swap_only"
+                       value="1"
+                       <?= $swapOnly ? 'checked' : '' ?>>
+                <label class="form-check-label small fw-semibold" for="swap_only">
+                    Swap only
+                </label>
+            </div>
+        </div>
+        <div class="col-6 col-md d-grid">
             <button type="submit" class="btn btn-primary">Search</button>
         </div>
     </div>

@@ -11,6 +11,8 @@
     const form = document.getElementById('search-form');
     const qInput = document.getElementById('q');
     const categorySelect = document.getElementById('category');
+    const priceMaxInput = document.getElementById('price_max');
+    const swapOnlyCheckbox = document.getElementById('swap_only');
     const countEl = document.getElementById('count');
     const spinnerEl = document.getElementById('spinner');
     const gridEl = document.getElementById('grid');
@@ -254,9 +256,16 @@
         const params = new URLSearchParams();
         const qVal = qInput ? qInput.value.trim() : '';
         const catVal = categorySelect ? Number(categorySelect.value || '0') : 0;
+        const priceMaxVal = priceMaxInput ? priceMaxInput.value.trim() : '';
+        const isSwapOnly = Boolean(swapOnlyCheckbox && swapOnlyCheckbox.checked);
 
         if (qVal !== '') params.set('q', qVal);
         if (catVal > 0) params.set('category_id', String(catVal));
+        if (isSwapOnly) {
+            params.set('swap_only', '1');
+        } else if (priceMaxVal !== '') {
+            params.set('price_max', priceMaxVal);
+        }
         params.set('page', String(currentPage));
 
         const result = await api('api/books.php?' + params.toString());
@@ -300,6 +309,19 @@
         }
     }
 
+    function syncPriceMaxDisabled() {
+        if (priceMaxInput && swapOnlyCheckbox) {
+            priceMaxInput.disabled = swapOnlyCheckbox.checked;
+        }
+    }
+
+    function scheduleDebouncedFilter() {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(function () {
+            loadBooks(1, false);
+        }, 300);
+    }
+
     form.addEventListener('submit', function (event) {
         event.preventDefault();
         clearTimeout(debounceTimer);
@@ -307,12 +329,12 @@
     });
 
     if (qInput) {
-        qInput.addEventListener('input', function () {
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(function () {
-                loadBooks(1, false);
-            }, 300);
-        });
+        qInput.addEventListener('input', scheduleDebouncedFilter);
+    }
+
+    if (priceMaxInput) {
+        priceMaxInput.addEventListener('input', scheduleDebouncedFilter);
+        priceMaxInput.addEventListener('change', scheduleDebouncedFilter);
     }
 
     if (categorySelect) {
@@ -322,7 +344,16 @@
         });
     }
 
+    if (swapOnlyCheckbox) {
+        swapOnlyCheckbox.addEventListener('change', function () {
+            syncPriceMaxDisabled();
+            clearTimeout(debounceTimer);
+            loadBooks(1, false);
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
+        syncPriceMaxDisabled();
         loadBooks(currentPage, false);
     });
 })();

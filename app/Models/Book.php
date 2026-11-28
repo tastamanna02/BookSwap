@@ -454,16 +454,23 @@ class Book
     }
 
     /**
-     * Paginated search for available books by title/author and optional category.
+     * Paginated search for available books by title/author, category, and optional price filters.
      * Returns ['items', 'total', 'page', 'pages'].
      */
-    public static function search(string $q = '', int $categoryId = 0, int $page = 1, int $perPage = 8): array
-    {
+    public static function search(
+        string $q = '',
+        int $categoryId = 0,
+        int $page = 1,
+        int $perPage = 8,
+        ?float $priceMax = null,
+        bool $swapOnly = false
+    ): array {
         $pdo = Database::pdo();
 
         $conditions = ["b.status = 'available'"];
         $trimmed = trim($q);
         $like = '';
+        $boundPriceMax = null;
 
         if ($trimmed !== '') {
             $like = '%' . self::escapeLike($trimmed) . '%';
@@ -475,17 +482,31 @@ class Book
             $conditions[] = 'b.category_id = :category_id';
         }
 
+        if ($swapOnly) {
+            $conditions[] = 'b.price IS NULL';
+        } elseif ($priceMax !== null && is_finite($priceMax) && $priceMax >= 0) {
+            $boundPriceMax = number_format(min(self::MAX_PRICE, $priceMax), 2, '.', '');
+            $conditions[] = 'b.price IS NOT NULL AND b.price <= :price_max';
+        }
+
         $whereSql = implode(' AND ', $conditions);
+
+        $bindFilters = static function (PDOStatement $stmt) use ($trimmed, $like, $categoryId, $boundPriceMax): void {
+            if ($trimmed !== '') {
+                $stmt->bindValue(':q1', $like, PDO::PARAM_STR);
+                $stmt->bindValue(':q2', $like, PDO::PARAM_STR);
+            }
+            if ($categoryId > 0) {
+                $stmt->bindValue(':category_id', $categoryId, PDO::PARAM_INT);
+            }
+            if ($boundPriceMax !== null) {
+                $stmt->bindValue(':price_max', $boundPriceMax, PDO::PARAM_STR);
+            }
+        };
 
         // 1. Count total matching available books first
         $countStmt = $pdo->prepare("SELECT COUNT(*) FROM books b WHERE $whereSql");
-        if ($trimmed !== '') {
-            $countStmt->bindValue(':q1', $like, PDO::PARAM_STR);
-            $countStmt->bindValue(':q2', $like, PDO::PARAM_STR);
-        }
-        if ($categoryId > 0) {
-            $countStmt->bindValue(':category_id', $categoryId, PDO::PARAM_INT);
-        }
+        $bindFilters($countStmt);
         $countStmt->execute();
         $total = (int) $countStmt->fetchColumn();
 
@@ -509,13 +530,7 @@ class Book
                       LIMIT :limit OFFSET :offset";
 
         $stmt = $pdo->prepare($selectSql);
-        if ($trimmed !== '') {
-            $stmt->bindValue(':q1', $like, PDO::PARAM_STR);
-            $stmt->bindValue(':q2', $like, PDO::PARAM_STR);
-        }
-        if ($categoryId > 0) {
-            $stmt->bindValue(':category_id', $categoryId, PDO::PARAM_INT);
-        }
+        $bindFilters($stmt);
         $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
