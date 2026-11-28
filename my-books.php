@@ -43,6 +43,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                         <tr>
                             <th>Title &amp; Author</th>
                             <th class="d-none d-md-table-cell">Category</th>
+                            <th class="d-none d-md-table-cell">Price</th>
                             <th>Status</th>
                             <th class="text-end">Actions</th>
                         </tr>
@@ -65,6 +66,20 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
                                 </td>
                                 <td class="d-none d-md-table-cell">
                                     <?= e($book['category_name']) ?>
+                                </td>
+                                <td class="d-none d-md-table-cell">
+                                    <?php $formattedPrice = Book::formatPrice($book['price'] ?? null); ?>
+                                    <?php if ($formattedPrice !== null): ?>
+                                        <?php [$priceLabel, $priceBadgeClass] = Book::priceBadge($book['price_type'] ?? 'fixed'); ?>
+                                        <div class="d-flex flex-wrap align-items-center gap-1">
+                                            <span class="fw-semibold">Tk <?= e($formattedPrice) ?></span>
+                                            <span class="badge <?= e($priceBadgeClass) ?>">
+                                                <?= e($priceLabel) ?>
+                                            </span>
+                                        </div>
+                                    <?php else: ?>
+                                        <span class="badge bg-secondary">Swap only</span>
+                                    <?php endif; ?>
                                 </td>
                                 <td>
                                     <span class="badge <?= e($badgeClass) ?>">

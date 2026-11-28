@@ -84,6 +84,37 @@ class Book
     }
 
     /**
+     * Format an optional price with thousands separators, hiding decimals for
+     * whole numbers (e.g. 450.00 -> "450", 1250.50 -> "1,250.50").
+     */
+    public static function formatPrice($rawPrice): ?string
+    {
+        if ($rawPrice === null || $rawPrice === '' || !is_numeric((string) $rawPrice)) {
+            return null;
+        }
+
+        $amount = (float) $rawPrice;
+        if ($amount <= 0) {
+            return null;
+        }
+
+        $formatted = number_format($amount, 2, '.', ',');
+        return substr($formatted, -3) === '.00' ? substr($formatted, 0, -3) : $formatted;
+    }
+
+    /**
+     * Return [label, bootstrapBadgeClass] for a book's price_type.
+     */
+    public static function priceBadge(?string $priceType): array
+    {
+        if ($priceType === 'bargaining') {
+            return ['Negotiable', 'bg-warning text-dark'];
+        }
+
+        return ['Fixed', 'bg-success'];
+    }
+
+    /**
      * Escape SQL LIKE wildcard characters so user searches match literal text.
      */
     private static function escapeLike(string $value): string

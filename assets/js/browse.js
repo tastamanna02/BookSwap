@@ -30,6 +30,47 @@
         return labels[cond] || (cond ? cond.charAt(0).toUpperCase() + cond.slice(1) : '');
     }
 
+    function formatPrice(rawPrice) {
+        if (rawPrice === null || rawPrice === undefined || String(rawPrice).trim() === '') {
+            return null;
+        }
+        const num = Number(rawPrice);
+        if (!Number.isFinite(num) || num <= 0) {
+            return null;
+        }
+        const isWhole = num.toFixed(2).endsWith('.00');
+        return num.toLocaleString('en-US', {
+            minimumFractionDigits: isWhole ? 0 : 2,
+            maximumFractionDigits: isWhole ? 0 : 2,
+        });
+    }
+
+    function createPriceBlock(book) {
+        const wrap = document.createElement('div');
+        wrap.className = 'd-flex flex-wrap align-items-center gap-2 mb-2';
+
+        const formattedPrice = formatPrice(book.price);
+        if (formattedPrice !== null) {
+            const amountEl = document.createElement('span');
+            amountEl.className = 'fw-bold text-primary';
+            amountEl.textContent = 'Tk ' + formattedPrice;
+            wrap.appendChild(amountEl);
+
+            const isBargaining = book.price_type === 'bargaining';
+            const typeBadge = document.createElement('span');
+            typeBadge.className = isBargaining ? 'badge bg-warning text-dark' : 'badge bg-success';
+            typeBadge.textContent = isBargaining ? 'Negotiable' : 'Fixed';
+            wrap.appendChild(typeBadge);
+        } else {
+            const swapBadge = document.createElement('span');
+            swapBadge.className = 'badge bg-secondary';
+            swapBadge.textContent = 'Swap only';
+            wrap.appendChild(swapBadge);
+        }
+
+        return wrap;
+    }
+
     function createCard(book) {
         const col = document.createElement('div');
         col.className = 'col-sm-6 col-lg-4 col-xl-3';
@@ -89,6 +130,8 @@
         authorEl.className = 'text-muted small mb-2';
         authorEl.textContent = 'by ' + String(book.author || '');
         body.appendChild(authorEl);
+
+        body.appendChild(createPriceBlock(book));
 
         const ownerEl = document.createElement('p');
         ownerEl.className = 'small text-secondary mb-3 mt-auto';

@@ -68,7 +68,25 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
             </div>
 
             <h1 class="h3 fw-bold text-primary mb-1"><?= e($book['title']) ?></h1>
-            <p class="text-muted mb-3">by <?= e($book['author']) ?></p>
+            <p class="text-muted mb-2">by <?= e($book['author']) ?></p>
+
+            <?php $formattedPrice = Book::formatPrice($book['price'] ?? null); ?>
+            <div class="mb-3">
+                <?php if ($formattedPrice !== null): ?>
+                    <?php [$priceLabel, $priceBadgeClass] = Book::priceBadge($book['price_type'] ?? 'fixed'); ?>
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <span class="h4 fw-bold text-primary mb-0">Tk <?= e($formattedPrice) ?></span>
+                        <span class="badge fs-6 <?= e($priceBadgeClass) ?>">
+                            <?= e($priceLabel) ?>
+                        </span>
+                    </div>
+                    <?php if (($book['price_type'] ?? 'fixed') === 'bargaining'): ?>
+                        <div class="small text-muted mt-1">Price is negotiable, message the owner</div>
+                    <?php endif; ?>
+                <?php else: ?>
+                    <span class="badge fs-6 bg-secondary">Swap only</span>
+                <?php endif; ?>
+            </div>
 
             <p class="mb-3">
                 <?= !empty($book['description'])
