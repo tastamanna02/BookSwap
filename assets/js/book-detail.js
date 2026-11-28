@@ -31,9 +31,10 @@
 
         setLoading(submitBtn, true);
 
-        const result = await api('api/swap-request.php', {
+        const result = await api('api/swap.php', {
             method: 'POST',
             data: {
+                action: 'request',
                 requested_book_id: requestedBookId,
                 offered_book_id: offeredBookId,
             },

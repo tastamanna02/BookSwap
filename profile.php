@@ -66,7 +66,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 }
 
 $bookStats = Book::getStatsForOwner($userId);
-$completedSwaps = Swap::countCompletedForUser($userId);
+$completedSwaps = Swap::completedCount($userId);
 
 $title = 'My Profile';
 require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'header.php';

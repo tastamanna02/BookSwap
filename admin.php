@@ -15,7 +15,7 @@ Auth::requireAdmin();
 $search = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
 $totalUsers = User::count();
 $bookStats = Book::counts();
-$swapStats = Swap::getStatsForAdmin();
+$swapStats = Swap::stats();
 $allBooks = Book::listAllForAdmin($search);
 $recentSwaps = Swap::listRecentForAdmin(15);
 
@@ -45,14 +45,14 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'partials' . DIRECTORY_SEPARATOR . 'head
         <div class="card border-0 shadow-sm p-3 stat-card">
             <span class="text-muted small">Open Swaps (Pending / Accepted)</span>
             <span class="h4 fw-bold mb-0">
-                <?= e((string) ($swapStats['pending_swaps'] + $swapStats['accepted_swaps'])) ?>
+                <?= e((string) ($swapStats['pending'] + $swapStats['accepted'])) ?>
             </span>
         </div>
     </div>
     <div class="col-sm-6 col-lg-3">
         <div class="card border-0 shadow-sm p-3 stat-card">
-            <span class="text-muted small">Completed Swaps</span>
-            <span class="h4 fw-bold mb-0"><?= e((string) $swapStats['completed_swaps']) ?></span>
+            <span class="text-muted small">Completed Swaps (<?= e((string) $swapStats['completed_7d']) ?> in 7d)</span>
+            <span class="h4 fw-bold mb-0"><?= e((string) $swapStats['completed']) ?></span>
         </div>
     </div>
 </div>

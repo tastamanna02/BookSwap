@@ -170,7 +170,7 @@
 
         setLoading(btn, true);
 
-        const result = await api('api/swap-action.php', {
+        const result = await api('api/swap.php', {
             method: 'POST',
             data: { swap_id: swapId, action: action },
         });
